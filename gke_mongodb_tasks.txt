@@ -1,0 +1,462 @@
+Why Each Task is Needed for GKE + MongoDB Setup in GCP
+1. Networking & Security Foundation
+
+VPC, Subnets, and CIDR ranges → defines the private “neighborhood” where your cluster and DB live; prevents IP overlaps with other CVS systems.
+
+Firewall rules → control exactly which traffic can reach MongoDB or GKE pods (e.g., only app pods can talk to DB, not the internet).
+
+Static IP ranges → reserve predictable addresses for load balancers and DB endpoints so downstream apps don’t break if IP changes.
+
+Private service access → ensures GKE nodes and DB connect via internal Google backbone, not public internet.
+
+VPC peering → allows secure, low-latency communication if MongoDB is hosted outside GKE (Atlas or VM).
+
+Network segmentation policies → isolates MongoDB in its own subnet for security and compliance (HIPAA/PHI protection).
+
+2. Identity & Permissions
+
+GCP service accounts → provide apps and nodes their own identity to interact with GCP services (no sharing credentials).
+
+IAM roles → enforces least-privilege access (e.g., GKE admin can’t delete billing accounts).
+
+Workload Identity Federation → allows pods to assume GCP identities securely without hardcoding keys.
+
+RBAC roles in GKE → controls who can deploy, who can view logs, who can access secrets inside the cluster.
+
+MongoDB user roles → separate DB admin vs application accounts; ensures developers can’t accidentally drop databases.
+
+3. GKE Cluster Setup
+
+Cluster name, region, node pools → organizes environments (dev vs prod) and ensures high availability across zones.
+
+Node pool machine types → balance cost vs performance (e.g., memory-optimized nodes for MongoDB pods).
+
+Autoscaling policies → automatically adds/removes nodes to handle traffic spikes without overpaying.
+
+Private cluster → blocks public IP exposure; only private internal access to nodes.
+
+IP alias, Pod CIDR, Service CIDR → prevents IP conflicts and ensures smooth Kubernetes networking.
+
+System add-ons (DNS, logging, monitoring) → required for cluster health and app discovery.
+
+Taints and tolerations → dedicate certain nodes for MongoDB workloads, keeping noisy neighbors away.
+
+4. MongoDB Setup
+
+StatefulSet + PVCs (if on GKE) → MongoDB requires stable storage and predictable pod names; StatefulSets provide both.
+
+StorageClass (SSD) → improves query speed and replication performance.
+
+Replica sets → provide high availability (if one node fails, another takes over).
+
+Authentication (SCRAM-SHA-256) → ensures only authorized apps/users can connect to DB.
+
+TLS certificates → encrypt traffic between GKE apps and MongoDB to meet HIPAA/PHI compliance.
+
+VM or Atlas setups → similar needs: patching, replication, secured connectivity.
+
+5. CI/CD Process
+
+Git repo for IaC → version-controls infrastructure (clusters, DB, firewalls) to avoid manual drift.
+
+Terraform modules → reusable building blocks for GKE, MongoDB, IAM, making infra scalable.
+
+Helm charts/K8s manifests → define MongoDB deployment and app configuration in a repeatable way.
+
+Pipelines (ADO/Cloud Build) → automate deployments → no manual kubectl runs.
+
+Secret Manager integration → keeps MongoDB passwords, certs, and keys out of Git repos.
+
+Approval workflows → enforces governance so prod changes require sign-off.
+
+6. Monitoring & Logging
+
+Cloud Logging/Monitoring → captures GKE and MongoDB health for troubleshooting.
+
+Prometheus + Grafana → deeper DB metrics (connections, replication lag, query latency).
+
+MongoDB exporter → integrates DB health into cluster monitoring dashboards.
+
+Alert policies → warn teams if DB is unreachable, disk is full, or pods crash.
+
+ServiceNow integration → triggers incidents automatically when alerts fire.
+
+Log sinks to BigQuery → stores audit logs for compliance investigations or analytics.
+
+7. Security & Compliance
+
+Shielded VM nodes → protect GKE node OS from rootkits and boot-level attacks.
+
+Binary Authorization → ensures only signed, trusted container images are deployed.
+
+Artifact Registry scans → prevent deploying images with known vulnerabilities.
+
+Network Policies → enforce pod-to-pod communication rules; MongoDB only talks to app pods.
+
+Secrets in Secret Manager → keeps credentials encrypted and centrally managed.
+
+Password/key rotation → prevents long-lived credentials that attackers could exploit.
+
+Penetration testing → validates setup against real-world attack scenarios.
+
+8. Backup & DR
+
+Backup strategy → MongoDB data must survive accidental deletion or ransomware.
+
+RPO/RTO targets → define acceptable data loss and downtime (e.g., 15 min RPO, 1 hr RTO).
+
+Restore playbooks → test that backups can actually be restored (many teams skip this).
+
+Multi-zone/region replication → ensures system stays up even if one zone or region fails.
+
+DR runbooks → step-by-step manual guide for ops during disaster.
+
+9. Testing & Validation
+
+Connectivity tests → confirm GKE apps reach MongoDB over TLS only.
+
+Load tests → check system behavior under peak enrollments or claims data queries.
+
+Failover tests → ensure replica nodes take over automatically without data loss.
+
+Scaling tests → confirm cluster autoscaling actually adds/removes nodes.
+
+Security validation → double-check firewall, IAM, and RBAC policies before go-live.
+
+10. Documentation & Handover
+
+Runbooks → give ops a step-by-step for daily checks, restarts, failover actions.
+
+CIDR, firewall, IAM documentation → ensures networking/security choices are transparent.
+
+Architecture diagrams → help leadership and auditors visualize the design.
+
+KT sessions → enable support teams to manage without constant engineering help.
+
+JIRA hierarchy (epics → stories → tasks) → keeps work visible, traceable, and aligned with CVS delivery standards.
+
+✅ In short:
+
+Every point ties back to security, compliance, stability, cost optimization, or member experience.
+
+This makes your JIRA backlog defensible when reviewed by execs, auditors, or InfoSec.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+JIRA Backlog for GKE + MongoDB Setup in GCP
+Epic 1: Networking & Security Foundation
+
+Story 1.1: Configure networking for GKE and MongoDB
+
+Tasks:
+
+Define VPC, subnets, and CIDR ranges.
+
+Reserve static IP ranges for services and load balancers.
+
+Configure private service access for GKE.
+
+Acceptance Criteria: VPC and subnets deployed; CIDR documented; GKE nodes and MongoDB reachable internally only.
+
+Story 1.2: Implement firewall & segmentation rules
+
+Tasks:
+
+Create firewall rules for GKE <-> MongoDB traffic.
+
+Block public internet access to MongoDB.
+
+Define network segmentation for DB subnet.
+
+Acceptance Criteria: Only approved pod/service accounts can connect to MongoDB; no external exposure.
+
+Epic 2: Identity & Permissions
+
+Story 2.1: Setup GCP Service Accounts & IAM
+
+Tasks:
+
+Create service accounts for GKE nodes and workloads.
+
+Assign least-privilege IAM roles.
+
+Acceptance Criteria: Service accounts mapped, IAM verified with least-privilege matrix.
+
+Story 2.2: Configure GKE RBAC and Workload Identity
+
+Tasks:
+
+Enable workload identity federation for pods.
+
+Create Kubernetes RBAC roles (admin, dev, read-only).
+
+Acceptance Criteria: Pods use GCP SA securely; RBAC prevents unauthorized kubectl actions.
+
+Story 2.3: Setup MongoDB user roles
+
+Tasks:
+
+Create MongoDB admin, app-user, and read-only roles.
+
+Enable password/secret rotation via Secret Manager.
+
+Acceptance Criteria: MongoDB authentication works; secrets rotated successfully.
+
+Epic 3: GKE Cluster Setup
+
+Story 3.1: Deploy GKE cluster with secure configuration
+
+Tasks:
+
+Define cluster name, region, zones.
+
+Setup node pools with machine types and autoscaling.
+
+Enable private cluster (no public IPs).
+
+Acceptance Criteria: Cluster runs privately with correct autoscaling behavior.
+
+Story 3.2: Configure GKE networking
+
+Tasks:
+
+Assign Pod CIDR and Service CIDR ranges.
+
+Verify no IP conflicts.
+
+Acceptance Criteria: Pods/services resolve correctly; connectivity validated.
+
+Story 3.3: Enable system add-ons & policies
+
+Tasks:
+
+Deploy DNS, logging, monitoring add-ons.
+
+Configure taints/tolerations for MongoDB pods.
+
+Acceptance Criteria: Cluster metrics visible; MongoDB runs on dedicated nodes.
+
+Epic 4: MongoDB Setup
+
+Story 4.1: Provision MongoDB in GCP
+
+Tasks:
+
+Deploy MongoDB StatefulSet + PVCs in GKE OR provision VM/Atlas cluster.
+
+Configure replica sets for HA.
+
+Acceptance Criteria: MongoDB accessible from GKE apps; replica failover works.
+
+Story 4.2: Secure MongoDB communication
+
+Tasks:
+
+Enable TLS between app pods and MongoDB.
+
+Enforce SCRAM-SHA-256 authentication.
+
+Acceptance Criteria: All DB connections encrypted; unauthenticated attempts blocked.
+
+Epic 5: CI/CD Process
+
+Story 5.1: Infrastructure as Code (IaC) setup
+
+Tasks:
+
+Create Terraform modules for VPC, GKE, IAM, MongoDB.
+
+Store in Git repo (ADO).
+
+Acceptance Criteria: Terraform applies infra successfully; version-controlled.
+
+Story 5.2: Application deployment automation
+
+Tasks:
+
+Define Helm charts/manifests for MongoDB + sample app.
+
+Configure ADO pipelines for deployments.
+
+Acceptance Criteria: Deployments reproducible via pipeline; no manual kubectl needed.
+
+Story 5.3: Secret management integration
+
+Tasks:
+
+Store MongoDB credentials in GCP Secret Manager.
+
+Inject secrets into pods at runtime.
+
+Acceptance Criteria: Secrets never hardcoded; rotated automatically.
+
+Epic 6: Monitoring & Logging
+
+Story 6.1: Enable GCP monitoring/logging
+
+Tasks:
+
+Configure Cloud Logging & Monitoring for cluster.
+
+Create basic dashboards.
+
+Acceptance Criteria: Logs and metrics visible in Cloud Console.
+
+Story 6.2: Setup MongoDB monitoring
+
+Tasks:
+
+Deploy MongoDB Prometheus exporter.
+
+Integrate with Grafana dashboards.
+
+Acceptance Criteria: MongoDB health metrics visible; alerts test successfully.
+
+Story 6.3: Configure alerting & incident integration
+
+Tasks:
+
+Define alert policies (CPU, memory, DB down).
+
+Route alerts to ServiceNow.
+
+Acceptance Criteria: Incident auto-created in ServiceNow on alert trigger.
+
+Epic 7: Security & Compliance
+
+Story 7.1: Harden GKE nodes
+
+Tasks:
+
+Use Shielded VM nodes.
+
+Enable OS patching schedule.
+
+Acceptance Criteria: Security scans pass; nodes show hardened config.
+
+Story 7.2: Container security enforcement
+
+Tasks:
+
+Enable Binary Authorization.
+
+Configure Artifact Registry scans.
+
+Acceptance Criteria: Only signed images deploy; vulnerabilities reported.
+
+Story 7.3: Enforce network and secret policies
+
+Tasks:
+
+Apply Kubernetes network policies.
+
+Integrate Secret Manager with auto-rotation.
+
+Acceptance Criteria: Pods can only reach intended services; secret age < 90 days.
+
+Epic 8: Backup & DR
+
+Story 8.1: Define MongoDB backup strategy
+
+Tasks:
+
+Setup snapshots or Atlas backup.
+
+Document retention policy.
+
+Acceptance Criteria: Backup job runs daily; backup visible in console.
+
+Story 8.2: Test restore & failover
+
+Tasks:
+
+Perform DB restore drill.
+
+Simulate node failure.
+
+Acceptance Criteria: Data restored within RPO/RTO; failover automatic.
+
+Epic 9: Testing & Validation
+
+Story 9.1: Connectivity validation
+
+Tasks:
+
+Run TLS connection tests from GKE → MongoDB.
+
+Acceptance Criteria: Only secure connections succeed.
+
+Story 9.2: Performance & scale testing
+
+Tasks:
+
+Load test cluster with synthetic traffic.
+
+Validate autoscaling.
+
+Acceptance Criteria: Cluster scales up/down as expected under load.
+
+Story 9.3: Security validation
+
+Tasks:
+
+Run IAM, RBAC, firewall validation.
+
+Conduct penetration test.
+
+Acceptance Criteria: No critical/high vulnerabilities found.
+
+Epic 10: Documentation & Handover
+
+Story 10.1: Create operational runbooks
+
+Tasks:
+
+Document startup/shutdown, failover, backup restore.
+
+Acceptance Criteria: Runbooks available in Confluence; peer-reviewed.
+
+Story 10.2: Architecture & config documentation
+
+Tasks:
+
+Record CIDR ranges, firewall ports, IAM roles.
+
+Create architecture diagrams.
+
+Acceptance Criteria: Diagrams and docs shared with leadership.
+
+Story 10.3: Knowledge transfer to ops
+
+Tasks:
+
+Conduct KT sessions.
+
+Walk through JIRA tasks completed.
+
+Acceptance Criteria: Ops confirms readiness to own support.
+
+✅ This breakdown makes your backlog executive-ready:
+
+Epics = 10 big tracks of work.
+
+Stories = what business/tech outcome is needed.
+
+Tasks = granular steps to implement.
+
+Acceptance Criteria = clear “definition of done.”
