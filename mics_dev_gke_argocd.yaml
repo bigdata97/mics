@@ -33,3 +33,22 @@ jobs:
           git config --global user.email "ci@github.com"
           git commit -am "Update image tag to ${{ github.sha }}"
           git push
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: idcard-service
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/org/idcard-deployments.git
+    targetRevision: main
+    path: k8s/idcard-service
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: idcard
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
