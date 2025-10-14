@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: idcard-service
+  namespace: idcard-dev
+  labels:
+    app: idcard-service
+    environment: dev
+    tier: backend
+spec:
+  replicas: 2                     # Number of pod replicas in dev environment
+  revisionHistoryLimit: 5         # Retain 5 revisions for rollback
+  selector:
+    matchLabels:
+      app: idcard-service
+  template:
+    metadata:
+      labels:
+        app: idcard-service
+        environment: dev
+    spec:
+      serviceAccountName: idcard-service-sa  # Optional: if using GCP Workload Identity
+      containers:
+        - name: idcard-service
+          image: jfrog.mycompany.com/idcard-docker/idcard-service:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          resources:                # Resource requests & limits
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          envFrom:                  # Import environment variables from ConfigMap & Secret
+            - configMapRef:
+                name: idcard-config
+            - secretRef:
+                name: idcard-secrets
+          livenessProbe:            # Checks if app is alive
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:           # Checks if app is ready to serve traffic
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+      restartPolicy: Always
+      imagePullSecrets:             # Secret for pulling from JFrog Artifactory
+        - name: jfrog-pull-secret
