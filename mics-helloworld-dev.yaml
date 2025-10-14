@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: idcard-service-dev
+  namespace: argocd
+  labels:
+    app: idcard-service
+    environment: dev
+spec:
+  project: default                      # Argo CD Project (default if not custom)
+  
+  source:
+    repoURL: 'https://github.com/org/idcard-deployments.git'  # GitOps repo URL
+    targetRevision: main                # Branch to watch (could be 'develop' for dev)
+    path: environments/dev/idcard-service   # Folder with YAML manifests
+  
+  destination:
+    server: 'https://kubernetes.default.svc'  # Target cluster (in-cluster)
+    namespace: idcard-dev                     # Target namespace in GKE
+  
+  syncPolicy:
+    automated:
+      prune: true            # Delete resources not defined in Git (cleanup)
+      selfHeal: true         # Revert manual cluster changes automatically
+    syncOptions:
+      - CreateNamespace=true # Auto-create namespace if missing
