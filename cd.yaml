@@ -1,0 +1,104 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mics-hwl-svc
+  labels:
+    app: mics-hwl-svc
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mics-hwl-svc
+  template:
+    metadata:
+      labels:
+        app: mics-hwl-svc
+      annotations:
+        # Istio: wait for proxy, route probes via sidecar (optional if using Istio)
+        proxy.istio.io/config: '{"holdApplicationUntilProxyStarts": true}'
+        sidecar.istio.io/rewriteAppHTTPProbers: "true"
+    spec:
+      serviceAccountName: ksa-mics
+      imagePullSecrets:
+        - name: jfrog-regcred
+      containers:
+        - name: mics-hwl-svc
+          image: cvsh.jfrog.io/cvsdigital-docker/<org>/<repo>/mics-hwl-svc:PLACEHOLDER_TAG
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: mics-hwl-config
+                  key: SPRING_PROFILES_ACTIVE
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "750m"
+              memory: "1Gi"
+
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mics-hwl-svc
+  labels:
+    app: mics-hwl-svc
+spec:
+  selector:
+    app: mics-hwl-svc
+  ports:
+    - port: 80
+      targetPort: 8080
+      protocol: TCP
+
+
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: mics-hwl-svc-dev
+  namespace: argocd
+  labels:
+    app: mics-hwl-svc
+  annotations:
+    # (Optional) Argo CD Image Updater: track JFrog and update Kustomize image
+    argocd-image-updater.argoproj.io/image-list: mics=cvsh.jfrog.io/cvsdigital-docker/<org>/<repo>/mics-hwl-svc
+    argocd-image-updater.argoproj.io/mics.update-strategy: digest
+    argocd-image-updater.argoproj.io/mics.allow-tags: regexp:^([0-9a-f]{7,40})$  # commit SHAs
+spec:
+  project: platform
+  source:
+    repoURL: 'https://github.com/<you>/<gitops-repo>.git'
+    targetRevision: main
+    path: apps/mics-hwl-svc/overlays/dev
+    kustomize: {}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: mics-nonprod-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - PrunePropagationPolicy=foreground
+      - Replace=true
+  revisionHistoryLimit: 5
