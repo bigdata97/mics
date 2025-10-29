@@ -1,0 +1,145 @@
+Perfect 👍 — you’re working on **domain name creation in GCP** for your **ID Card portal**, which will host multiple microservices (frontend + backend).
+Let’s make this very clear so you can **update your JIRA ticket professionally**.
+
+---
+
+## 🧾 **JIRA Task Description (Detailed & Clear)**
+
+### **Title:**
+
+Creation of Domain Name in GCP for ID Card Portal Access
+
+### **Description:**
+
+As part of the ID Card Portal setup, we need to create and configure a **custom domain name** in **Google Cloud Platform (GCP)** to access the application externally, instead of using `localhost` or internal IPs.
+This domain will serve as the **entry point** for all deployed microservices — frontend (UI) and backend (APIs) — hosted in GKE clusters.
+
+### **Purpose:**
+
+To provide a consistent and user-friendly domain name for internal/external users to access the ID Card portal components (e.g., `https://idcard.cvshealth.com`).
+
+### **Scope / Steps to be Implemented:**
+
+1. **Decide the domain naming convention**
+
+   * Example: `idcard.<env>.<org>.com` (e.g., `idcard.dev.cvshealth.com`)
+   * Ensure it aligns with enterprise DNS standards and environment (dev/test/prod).
+
+2. **Create or identify domain in GCP**
+
+   * Use **GCP Cloud Domains** or **Cloud DNS** (depending on whether domain is newly purchased or already owned by the organization).
+   * If existing org domain exists (e.g., `cvshealth.com`), request a subdomain delegation (`idcard.dev.cvshealth.com`).
+
+3. **Configure DNS Zone**
+
+   * Create a **public DNS zone** in **Cloud DNS** (for public access).
+   * Define **A records** or **CNAME records** pointing to the appropriate ingress load balancer IP created by GKE.
+   * Example:
+
+     ```
+     Record type: A
+     Name: idcard.dev.cvshealth.com
+     Value: <GKE ingress static IP>
+     TTL: 300
+     ```
+
+4. **Reserve a static IP**
+
+   * In GCP, go to `VPC Network → External IP addresses`
+   * Reserve a **static IP** (for frontend ingress).
+   * This IP will be mapped to the DNS record.
+
+5. **Ingress configuration**
+
+   * Update the Kubernetes Ingress YAML (for frontend and backend) to use this domain.
+   * Example:
+
+     ```yaml
+     host: idcard.dev.cvshealth.com
+     ```
+
+6. **SSL / HTTPS setup**
+
+   * Configure **Google-managed SSL certificate** or integrate with internal PKI.
+   * Attach SSL cert to the ingress.
+
+7. **Validation**
+
+   * Verify DNS propagation using:
+
+     ```bash
+     nslookup idcard.dev.cvshealth.com
+     ```
+   * Test app access via browser or curl.
+
+---
+
+### **Expected Outcome:**
+
+* A working domain (e.g., `https://idcard.dev.cvshealth.com`) that routes traffic to the GKE ingress of the ID Card portal.
+* The same domain can later host multiple microservices (frontend, backend, admin, etc.) under subpaths or subdomains (e.g., `/api`, `/ui`, `admin.idcard.dev.cvshealth.com`).
+
+---
+
+## 📅 **Status Update for Today (Precise and Professional)**
+
+> **Status:** *In Progress*
+>
+> **Update:**
+> Initiated the setup for creating a custom domain name in GCP for the ID Card portal. Finalized the requirement that the domain will be used as a unified entry point for both backend and frontend services deployed via GKE.
+> Currently reviewing existing domain ownership and identifying whether a new subdomain (`idcard.dev.cvshealth.com`) can be created under the organizational DNS or if a new domain registration is required through Cloud Domains.
+> Next step is to create the DNS zone in Cloud DNS, reserve a static IP, and map it to the GKE ingress endpoint for verification.
+
+---
+
+✅ **In short:**
+
+* **Description** → detailed purpose, steps, and expected outcome.
+* **Status** → precise, progress-oriented, and clear next steps.
+
+---
+
+Would you like me to also write a **future status update** (for tomorrow), assuming you’ll finish DNS zone creation and ingress mapping by then?
+
+
+
+
+
+
+Perfect 👍 — here’s what you can post tomorrow as your **next JIRA status update** once you’ve completed the DNS zone and ingress mapping work.
+
+---
+
+## 🗓️ **Tomorrow’s JIRA Status Update**
+
+> **Status:** *In Progress → Near Completion*
+>
+> **Update:**
+> Completed the creation of the DNS zone in **Google Cloud DNS** for the ID Card portal. Reserved a **static external IP** and mapped it to the DNS record (`A` record) within the zone.
+> Verified DNS propagation successfully using `nslookup` and confirmed that the domain resolves to the expected GKE ingress IP.
+>
+> Also updated the **Ingress YAML** configuration for both frontend and backend services to use the new domain name (`idcard.dev.cvshealth.com`) as the host entry.
+>
+> Next step is to request or configure a **Google-managed SSL certificate** for enabling HTTPS access, followed by final testing of end-to-end connectivity to the deployed services.
+
+---
+
+## 📋 **Summary of Completed Work**
+
+* ✅ DNS zone created in Cloud DNS
+* ✅ Static IP reserved and linked
+* ✅ Domain record (`A` record) added
+* ✅ Ingress configuration updated to use domain
+* ✅ Domain resolution verified
+
+## 🔜 **Next Steps**
+
+* Set up SSL certificate (Google-managed or internal PKI)
+* Verify secure (HTTPS) access through ingress
+* Document domain configuration and share with DevOps team for CD integration
+
+---
+
+✅ This update sounds professional, structured, and clearly shows progress and ownership.
+Would you like me to also provide the **final completion update** wording (for when HTTPS testing and portal verification are done)?
+
