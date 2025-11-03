@@ -102,3 +102,62 @@ spec:
       - PrunePropagationPolicy=foreground
       - Replace=true
   revisionHistoryLimit: 5
+
+
+
+
+
+
+
+
+
+
+----------------
+
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: mics-hw-svc
+  namespace: mics-nonprod-dev
+spec:
+  selector:
+    app: mics-hw-svc
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+  type: ClusterIP
+
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: mics-ingress
+  namespace: mics-nonprod-dev
+  annotations:
+    kubernetes.io/ingress.class: "gce"  # tells GKE to create an HTTP(S) Load Balancer
+    kubernetes.io/ingress.allow-http: "true"
+spec:
+  rules:
+    - host: mics-nonprod-dev.cvshealth.com
+      http:
+        paths:
+          - path: /hw
+            pathType: Prefix
+            backend:
+              service:
+                name: mics-hw-svc
+                port:
+                  number: 8080
+
+          - path: /idcard
+            pathType: Prefix
+            backend:
+              service:
+                name: mics-idcard-svc
+                port:
+                  number: 8080
+
+
+
