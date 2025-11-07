@@ -161,3 +161,22 @@ spec:
 
 
 
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: mics-auth-api-virtualservice
+  namespace: mics-nonprod-dev
+spec:
+  hosts:
+  - "mics-auth-api.mics.aetna.com"                # must match DNS hostname (from nslookup)
+  gateways:
+  - istio-system/istio-internal-ingressgateway    # shared gateway in istio-system
+  http:
+  - match:
+    - uri:
+        prefix: /auth
+    route:
+    - destination:
+        host: mics-auth-api.mics-nonprod-dev.svc.cluster.local
+        port:
+          number: 8080
