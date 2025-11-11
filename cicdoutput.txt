@@ -1,3 +1,13 @@
+Access-Control-Allow-Origin: https://mics-auth-api.mics.aetna.com
+Access-Control-Allow-Methods: GET, POST, OPTIONS
+Access-Control-Allow-Headers: Authorization, Content-Type
+
+
+
+
+
+
+
 ✅ Excellent — this output is completely **expected** and actually confirms that your service and routing are working correctly.
 
 Let’s break it down clearly 👇
