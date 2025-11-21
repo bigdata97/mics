@@ -147,3 +147,103 @@ db.configuration_metadata.insertOne({
   updatedDate: null,
   auditTrail: null
 });
+
+
+
+
+
+
+
+
+
+use mics;
+
+// ==============================================
+// Ex1 Record - configuration_overrides
+// ==============================================
+db.configuration_overrides.insertOne({
+  _id: ObjectId("673b0000f2a9c0a111"),
+  configId: ObjectId("673a1000f1a9c0a001"), // Reference to corresponding configuration_metadata record
+  changes: [
+    {
+      overrideId: "75063864f7203378769a1eb2",
+      overrideLevel: "CSA",                                       // From Excel
+      overrideValues: ["733909-10-004", "733909-10-007"],         // From Excel level value
+      fieldName: "planSponsor",
+      fieldValue: ["Ford Motors", "Ford Motors New"],             // From Excel
+      cardPreview: { front: "", back: "" },
+      cardDetails: [
+        {
+          label: "Plan Sponsor (Header)",
+          value: "Ford Motors, Ford Motors New",
+          type: "string",
+          order: 0
+        },
+        {
+          label: "Product (Header)",
+          value: "PPO Medical, PPO Dental",
+          type: "string",
+          order: 1
+        },
+        {
+          label: "Policy Holder Name",
+          value: "Ford Motors, Ford Motors New",
+          type: "string",
+          order: 2
+        }
+      ],
+      claimOffice: {
+        address1: "PO BOX 14079",
+        address2: "LEXINGTON, KY 40512 4079"
+      }
+    },
+    {
+      overrideId: "795a76f6bac5b83143f56ec6",
+      overrideLevel: "CSA",
+      overrideValues: ["733909-10-004", "733909-10-007"],
+      fieldName: "bocConfig",
+      fieldValue: "Line 1 - See your plan documents for all plan requirements including pre-certification. In an emergency seek care immediately or call 911. This card does not guarantee coverage.",
+      cardPreview: { front: "", back: "" },
+      cardDetails: [
+        {
+          label: "BOC Wording",
+          value: "Line 1 - See your plan documents for all plan requirements including pre-certification. In an emergency seek care immediately or call 911. This card does not guarantee coverage.",
+          type: "string",
+          order: 0
+        }
+      ],
+      claimOffice: {
+        address1: "PO BOX 14079",
+        address2: "LEXINGTON, KY 40512 4079"
+      }
+    },
+    {
+      overrideId: "795a76f6bac5b83143f56ed7",
+      overrideLevel: "CSA",
+      overrideValues: ["733909-10-004", "733909-10-007"],
+      fieldName: "phoneNumbers",
+      fieldValue: ["1-800-123-1234", "1-800-001-0101"],
+      cardPreview: { front: "", back: "" },
+      cardDetails: [
+        {
+          label: "Provider Phone Number",
+          value: "1-800-123-1234",
+          type: "phoneNumber",
+          order: 0
+        },
+        {
+          label: "TeleDoc/Telemedicine",
+          value: "1-800-001-0101",
+          type: "phoneNumber",
+          order: 1
+        }
+      ],
+      claimOffice: {
+        address1: "PO BOX 14079",
+        address2: "LEXINGTON, KY 40512 4079"
+      }
+    }
+  ],
+  changedBy: "override_manager",
+  changedAt: new Date()  // Automatically uses current date/time
+});
