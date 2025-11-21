@@ -156,6 +156,28 @@ db.configuration_metadata.insertOne({
 
 
 
+
+
+
+
+
+
+| **Excel Field**        | **Mongo Field**             | **Value (Ex1)**                            | **Notes**                                            |
+| ---------------------- | --------------------------- | ------------------------------------------ | ---------------------------------------------------- |
+| Override level         | `overrideLevel`             | `"CSA"`                                    | Same as Excel                                        |
+| Level value            | `overrideValues`            | `["733909-10-004","733909-10-007"]`        | Comma-separated values from Excel converted to array |
+| Plan Sponsor (header)  | `fieldName: "planSponsor"`  | `"Ford Motors, Ford Motors New"`           | Used in first change block                           |
+| Product (header)       | `cardDetails[1].label`      | `"PPO Medical, PPO Dental"`                | Mapped to same block                                 |
+| Policy Holder Name     | `cardDetails[2].label`      | `"Ford Motors, Ford Motors New"`           |                                                      |
+| BOC Wording            | `fieldName: "bocConfig"`    | `"Line 1 - See your plan documents..."`    |                                                      |
+| Provider Phone Number  | `fieldName: "phoneNumbers"` | `"1-800-123-1234"`                         |                                                      |
+| Teledoc / Telemedicine | `cardDetails[1].value`      | `"1-800-001-0101"`                         |                                                      |
+| Claim Office Address   | `claimOffice`               | `"PO BOX 14079, LEXINGTON, KY 40512 4079"` | Flattened as two fields for clarity                  |
+
+
+
+
+
 use mics;
 
 // ==============================================
