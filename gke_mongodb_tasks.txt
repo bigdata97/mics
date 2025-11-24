@@ -1,286 +1,12 @@
 use mics;
 
-// ==============================
-// Ex1 Record
-// ==============================
-db.configuration_metadata.insertOne({
-  _id: ObjectId("673a1000f1a9c0a001"),
-  enableCard: true,
-  familyFormat: "Family",
-  customLogo: {
-    frontLogo: "RN003",
-    backLogo: "BL001"
-  },
-  policyHolderName: "Ford Motor Co",
-  bocConfig: {
-    code: "MR10 Medical Family",
-    wording: "Line 1 - See your plan documents for all plan requirements."
-  },
-  phoneNumbers: [
-    { mbh: "1-800-423-4047" },
-    { customNumber1: "1-800-401-0101" }
-  ],
-  claimOffice: {
-    key: "100",
-    address: "PO BOX 14079, LEXINGTON, KY 40512"
-  },
-  planSponsor: ["Ford Motor Co"],
-  plan: "Choice POS II",
-  payorId: "60054 106",
-  version: 1,
-  approvalStatus: "approved",
-  contactInformation: null,
-  createdBy: null,
-  createdDate: null,
-  updatedBy: null,
-  updatedDate: null,
-  auditTrail: null
-});
-
-// ==============================
-// Ex2 Record
-// ==============================
-db.configuration_metadata.insertOne({
-  _id: ObjectId("673a1000f1a9c0a002"),
-  enableCard: true,
-  familyFormat: "Individual",
-  customLogo: {
-    frontLogo: "RN004",
-    backLogo: "BL002"
-  },
-  policyHolderName: "General Motors",
-  bocConfig: {
-    code: "MR11 Medical Individual",
-    wording: "Line 1 - Refer to your plan materials for all requirements."
-  },
-  phoneNumbers: [
-    { mbh: "1-888-555-7890" },
-    { customNumber1: "1-888-401-5678" }
-  ],
-  claimOffice: {
-    key: "200",
-    address: "PO BOX 15080, DALLAS, TX 75221"
-  },
-  planSponsor: ["General Motors"],
-  plan: "Open Access HMO",
-  payorId: "60055 107",
-  version: 1,
-  approvalStatus: "approved",
-  contactInformation: null,
-  createdBy: null,
-  createdDate: null,
-  updatedBy: null,
-  updatedDate: null,
-  auditTrail: null
-});
-
-// ==============================
-// Ex3 Record
-// ==============================
-db.configuration_metadata.insertOne({
-  _id: ObjectId("673a1000f1a9c0a003"),
-  enableCard: true,
-  familyFormat: "Family",
-  customLogo: {
-    frontLogo: "RN005",
-    backLogo: "BL003"
-  },
-  policyHolderName: "Tesla Inc",
-  bocConfig: {
-    code: "MR12 Medical Family",
-    wording: "See your benefit summary for all coverage and requirements."
-  },
-  phoneNumbers: [
-    { mbh: "1-877-777-5555" },
-    { customNumber1: "1-877-401-2222" }
-  ],
-  claimOffice: {
-    key: "300",
-    address: "PO BOX 11045, PHOENIX, AZ 85062"
-  },
-  planSponsor: ["Tesla Inc"],
-  plan: "High Deductible PPO",
-  payorId: "60056 108",
-  version: 1,
-  approvalStatus: "approved",
-  contactInformation: null,
-  createdBy: null,
-  createdDate: null,
-  updatedBy: null,
-  updatedDate: null,
-  auditTrail: null
-});
-
-// ==============================
-// Ex4 Record
-// ==============================
-db.configuration_metadata.insertOne({
-  _id: ObjectId("673a1000f1a9c0a004"),
-  enableCard: false,
-  familyFormat: "Individual",
-  customLogo: {
-    frontLogo: "RN006",
-    backLogo: "BL004"
-  },
-  policyHolderName: "Amazon Health",
-  bocConfig: {
-    code: "MR13 Medical Individual",
-    wording: "See your plan documents or contact HR for coverage details."
-  },
-  phoneNumbers: [
-    { mbh: "1-855-333-8080" },
-    { customNumber1: "1-855-401-9090" }
-  ],
-  claimOffice: {
-    key: "400",
-    address: "PO BOX 15090, ATLANTA, GA 30303"
-  },
-  planSponsor: ["Amazon Health"],
-  plan: "EPO Plus",
-  payorId: "60057 109",
-  version: 1,
-  approvalStatus: "approved",
-  contactInformation: null,
-  createdBy: null,
-  createdDate: null,
-  updatedBy: null,
-  updatedDate: null,
-  auditTrail: null
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-| **Excel Field**        | **Mongo Field**             | **Value (Ex1)**                            | **Notes**                                            |
-| ---------------------- | --------------------------- | ------------------------------------------ | ---------------------------------------------------- |
-| Override level         | `overrideLevel`             | `"CSA"`                                    | Same as Excel                                        |
-| Level value            | `overrideValues`            | `["733909-10-004","733909-10-007"]`        | Comma-separated values from Excel converted to array |
-| Plan Sponsor (header)  | `fieldName: "planSponsor"`  | `"Ford Motors, Ford Motors New"`           | Used in first change block                           |
-| Product (header)       | `cardDetails[1].label`      | `"PPO Medical, PPO Dental"`                | Mapped to same block                                 |
-| Policy Holder Name     | `cardDetails[2].label`      | `"Ford Motors, Ford Motors New"`           |                                                      |
-| BOC Wording            | `fieldName: "bocConfig"`    | `"Line 1 - See your plan documents..."`    |                                                      |
-| Provider Phone Number  | `fieldName: "phoneNumbers"` | `"1-800-123-1234"`                         |                                                      |
-| Teledoc / Telemedicine | `cardDetails[1].value`      | `"1-800-001-0101"`                         |                                                      |
-| Claim Office Address   | `claimOffice`               | `"PO BOX 14079, LEXINGTON, KY 40512 4079"` | Flattened as two fields for clarity                  |
-
-
-
-
-
-use mics;
-
-// ==============================================
-// Ex1 Record - configuration_overrides
-// ==============================================
-db.configuration_overrides.insertOne({
-  _id: ObjectId("673b0000f2a9c0a111"),
-  configId: ObjectId("673a1000f1a9c0a001"), // Reference to corresponding configuration_metadata record
-  changes: [
-    {
-      overrideId: "75063864f7203378769a1eb2",
-      overrideLevel: "CSA",                                       // From Excel
-      overrideValues: ["733909-10-004", "733909-10-007"],         // From Excel level value
-      fieldName: "planSponsor",
-      fieldValue: ["Ford Motors", "Ford Motors New"],             // From Excel
-      cardPreview: { front: "", back: "" },
-      cardDetails: [
-        {
-          label: "Plan Sponsor (Header)",
-          value: "Ford Motors, Ford Motors New",
-          type: "string",
-          order: 0
-        },
-        {
-          label: "Product (Header)",
-          value: "PPO Medical, PPO Dental",
-          type: "string",
-          order: 1
-        },
-        {
-          label: "Policy Holder Name",
-          value: "Ford Motors, Ford Motors New",
-          type: "string",
-          order: 2
-        }
-      ],
-      claimOffice: {
-        address1: "PO BOX 14079",
-        address2: "LEXINGTON, KY 40512 4079"
-      }
-    },
-    {
-      overrideId: "795a76f6bac5b83143f56ec6",
-      overrideLevel: "CSA",
-      overrideValues: ["733909-10-004", "733909-10-007"],
-      fieldName: "bocConfig",
-      fieldValue: "Line 1 - See your plan documents for all plan requirements including pre-certification. In an emergency seek care immediately or call 911. This card does not guarantee coverage.",
-      cardPreview: { front: "", back: "" },
-      cardDetails: [
-        {
-          label: "BOC Wording",
-          value: "Line 1 - See your plan documents for all plan requirements including pre-certification. In an emergency seek care immediately or call 911. This card does not guarantee coverage.",
-          type: "string",
-          order: 0
-        }
-      ],
-      claimOffice: {
-        address1: "PO BOX 14079",
-        address2: "LEXINGTON, KY 40512 4079"
-      }
-    },
-    {
-      overrideId: "795a76f6bac5b83143f56ed7",
-      overrideLevel: "CSA",
-      overrideValues: ["733909-10-004", "733909-10-007"],
-      fieldName: "phoneNumbers",
-      fieldValue: ["1-800-123-1234", "1-800-001-0101"],
-      cardPreview: { front: "", back: "" },
-      cardDetails: [
-        {
-          label: "Provider Phone Number",
-          value: "1-800-123-1234",
-          type: "phoneNumber",
-          order: 0
-        },
-        {
-          label: "TeleDoc/Telemedicine",
-          value: "1-800-001-0101",
-          type: "phoneNumber",
-          order: 1
-        }
-      ],
-      claimOffice: {
-        address1: "PO BOX 14079",
-        address2: "LEXINGTON, KY 40512 4079"
-      }
-    }
-  ],
-  changedBy: "override_manager",
-  changedAt: new Date()  // Automatically uses current date/time
-});
-
-
-
-use mics;
-
-// ================================
-// Ex2 Record
+// ========================================
+// Ex2 Record (Plan Level)
 // Collection: configuration_overrides
-// ================================
+// ========================================
 
 db.configuration_overrides.insertOne({
-  configId: ObjectId("672abc123def456789012345"),
+  configId: ObjectId("672abc123def456789012345"), // reference to configuration_metadata
   changes: [
     {
       overrideId: "75063864f7203378769a1ec2",
@@ -293,41 +19,21 @@ db.configuration_overrides.insertOne({
         back: ""
       },
       cardDetails: [
-        {
-          label: "Plan Sponsor",
-          value: "DMT-S-PRAS-0026-01",
-          type: "string",
-          order: 0
-        },
-        {
-          label: "Product",
-          value: "Dental PPO",
-          type: "string",
-          order: 1
-        },
-        {
-          label: "Policy Holder Name",
-          value: "DMT-S-PRAS-0026-01",
-          type: "string",
-          order: 2
-        },
-        {
+        { label: "Plan Sponsor", value: "DMT-S-PRAS-0026-01", type: "string", order: 0 },
+        { label: "Product", value: "Open Choice PPO medical", type: "string", order: 1 },
+        { label: "Policy Holder Name", value: "DMT-S-PRAS-0026-01", type: "string", order: 2 },
+        { 
           label: "BOC Wording",
-          value: "Line 1 - See your plan documents for all plan requirements, including Line 2 - does not require a primary care dentist or referral. Line 3 - Note: This card does not guarantee coverage.",
+          value: "Line 1 - NEW - See your plan documents for all plan requirements, including Line 2 - precertification. NEW - In an emergency, seek care immediately or Line 3 - call 911. NEW - This card does not guarantee coverage.",
           type: "string",
           order: 3
         },
-        {
-          label: "MBH Phone Number",
-          value: "1-800-123-1234",
-          type: "phoneNumber",
-          order: 4
-        },
-        {
-          label: "Claim Office",
-          value: "Address 1 - PO BOX 14094, Address 2 - LEXINGTON KY 40512 4079",
-          type: "address",
-          order: 5
+        { label: "MBH Phone Number", value: "1-800-424-4047", type: "phoneNumber", order: 4 },
+        { 
+          label: "Claim Office Address", 
+          value: "Address 1 - PO BOX 14094, Address 2 - LEXINGTON, KY 40512 4094",
+          type: "address", 
+          order: 5 
         }
       ],
       claimsOffice: {
@@ -345,17 +51,15 @@ db.configuration_overrides.insertOne({
 });
 
 
-
-
 use mics;
 
-// ================================
-// Ex3 Record
+// ========================================
+// Ex3 Record (Control Level)
 // Collection: configuration_overrides
-// ================================
+// ========================================
 
 db.configuration_overrides.insertOne({
-  configId: ObjectId("672abc123def456789012345"),
+  configId: ObjectId("672abc123def456789012345"), // reference to configuration_metadata
   changes: [
     {
       overrideId: "795a76f6bac5b83143f56e7c",
@@ -368,41 +72,21 @@ db.configuration_overrides.insertOne({
         back: ""
       },
       cardDetails: [
-        {
-          label: "Plan Sponsor",
-          value: "DMT-S-PRAS-0026-06",
-          type: "string",
-          order: 0
-        },
-        {
-          label: "Product",
-          value: "Open Choice PPO Medical",
-          type: "string",
-          order: 1
-        },
-        {
-          label: "Policy Holder Name",
-          value: "DMT-S-PRAS-0026-06",
-          type: "string",
-          order: 2
-        },
-        {
+        { label: "Plan Sponsor", value: "DMT-S-PRAS-0026-06", type: "string", order: 0 },
+        { label: "Product", value: "Open Choice PPO medical", type: "string", order: 1 },
+        { label: "Policy Holder Name", value: "DMT-S-PRAS-0026-06", type: "string", order: 2 },
+        { 
           label: "BOC Wording",
-          value: "Line 1 - See your plan documents for all plan requirements, including Line 2 - pre-certification. In an emergency, seek care immediately or Line 3 - call 911. This card does not guarantee coverage.",
+          value: "Line 1 - See your plan documents for all plan requirements, including Line 2 - precertification. In an emergency, seek care immediately or Line 3 - call 911. This card does not guarantee coverage.",
           type: "string",
           order: 3
         },
-        {
-          label: "MBH Phone Number",
-          value: "1-800-424-4047",
-          type: "phoneNumber",
-          order: 4
-        },
-        {
-          label: "Claim Office",
-          value: "Address 1 - PO BOX 14079, Address 2 - LEXINGTON KY 40512 4094",
-          type: "address",
-          order: 5
+        { label: "MBH Phone Number", value: "1-800-424-4047", type: "phoneNumber", order: 4 },
+        { 
+          label: "Claim Office Address", 
+          value: "Address 1 - PO BOX 14079, Address 2 - LEXINGTON, KY 40512 4079",
+          type: "address", 
+          order: 5 
         }
       ],
       claimsOffice: {
