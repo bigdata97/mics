@@ -1,0 +1,44 @@
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: mics-app-dev-gateway
+  namespace: default       # Same namespace where ingress gateway runs (usually istio-system or default)
+  labels:
+    environment: dev
+spec:
+  selector:
+    istio: internal-ingressgateway   # Must match your ingress gateway’s label
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+      - "mics-app-dev.mics.cvshealth.com"   # Only this host allowed
+    tls:
+      mode: SIMPLE
+      credentialName: internal-gkgatewaysecret   # Reuse existing wildcard TLS secret
+
+
+
+
+apiVersion: networking.istio.io/v1
+kind: Gateway
+metadata:
+  name: mics-app-qa-gateway
+  namespace: default
+  labels:
+    environment: qa
+spec:
+  selector:
+    istio: internal-ingressgateway
+  servers:
+  - port:
+      number: 443
+      name: https
+      protocol: HTTPS
+    hosts:
+      - "mics-app-qa.mics.cvshealth.com"    # QA-specific hostname
+    tls:
+      mode: SIMPLE
+      credentialName: internal-gkgatewaysecret   # Same TLS cert reused safely
