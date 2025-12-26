@@ -1,65 +1,17 @@
-Here are **perfect, professional JIRA-style descriptions + 2–3 update comments** for your HTTPS certificate + QA URL creation story.
-You can copy-paste directly.
+Subject: Request to Add QA Redirect URI to Ping SSO Client ID (Priority)
 
----
+Hi Team,
+Hope you are all doing well and having a wonderful Christmas season.
 
-# ✅ **JIRA Story Description (Clear & Professional)**
+I have created a ticket requesting the addition of the QA redirect URI to our Ping SSO Client ID. This is required to complete the QA environment setup and unblock authentication flow for our application.
 
-**Story Title:**
-*Create HTTPS Certificate and Configure QA Environment URL*
+Could someone from the team please take a look and help address this request at the earliest convenience?
+This is a priority item, as we are currently blocked on QA testing until the redirect URI is added.
 
-**Description:**
-This story involves setting up a secure HTTPS endpoint for the QA environment by requesting and configuring the SSL certificate for the QA domain. As part of this task, the QA URL must be created, DNS entries updated, and the certificate applied so the application is accessible without HTTPS “red error” or browser security warnings.
+Ticket Reference: <add your ticket number here>
 
-**Scope includes:**
+Please let me know if you need any additional details from my side.
+Thank you so much for your support!
 
-* Creating the QA environment URL (e.g., `qa.<your-app>.cvshealth.com`)
-* Requesting and obtaining the SSL certificate through the enterprise certificate team
-* Adding/validating DNS A/CNAME records pointing to internal load balancer
-* Uploading and configuring the certificate in GKE ingress/istio gateway
-* Verifying HTTPS handshake and ensuring no certificate warnings appear
-* Testing application accessibility over secure HTTPS
-
-**Acceptance Criteria:**
-
-* QA URL resolves correctly via DNS
-* SSL certificate is active and trusted
-* No browser security warnings (red HTTPS error removed)
-* Application loads successfully using the QA HTTPS URL
-* Documentation updated on how to renew/manage the certificate
-
----
-
-# ✅ **Update Comment 1 (When work began)**
-
-**Update – Initial Progress:**
-Reached out to the Infra/Certificate team to request the SSL certificate for the new QA domain. Shared the required details (domain name, purpose, environment, ownership).
-Awaiting certificate generation and DNS updates.
-
----
-
-# ✅ **Update Comment 2 (Mid-progress)**
-
-**Update – DNS & Certificate Setup:**
-Certificate team has issued the SSL certificate for the QA URL.
-Updated the DNS records to point to the internal load balancer IP.
-Deployed the certificate in the GKE Ingress/Istio Gateway configuration for the QA namespace.
-HTTPS handshake validation completed successfully.
-
----
-
-# ✅ **Update Comment 3 (Final – After completion)**
-
-**Final Update – Story Completed:**
-HTTPS certificate installation and QA URL configuration are completed.
-The QA application is now accessible over HTTPS without any browser warnings.
-Validated end-to-end routing through gateway → virtual service → service → pods, and confirmed secured access.
-Story is now ready to be closed.
-
----
-
-If you want, I can also write:
-✅ A detailed commit message
-✅ Release notes update
-✅ JIRA sub-task descriptions
-Or rewrite the above in a more concise/technical style.
+Warm regards,
+<Your Name>
