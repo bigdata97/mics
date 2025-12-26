@@ -1,69 +1,65 @@
-Perfect 👍 — based on your story **“CICD Integration & URL Creation for hosting application”**, and subtasks under it, here are polished and accurate **descriptions** and **status updates** for each subtask:
+Here are **perfect, professional JIRA-style descriptions + 2–3 update comments** for your HTTPS certificate + QA URL creation story.
+You can copy-paste directly.
 
 ---
 
-## 🧱 **TLIDCE-239 – Setup the application deployment on domain configuration**
+# ✅ **JIRA Story Description (Clear & Professional)**
 
-### **Description:**
+**Story Title:**
+*Create HTTPS Certificate and Configure QA Environment URL*
 
-This task involves configuring the **application deployment** to use the newly created **GCP domain name**.
-The goal is to make the deployed microservices (frontend and backend) accessible via the registered domain instead of using internal or cluster-local endpoints.
+**Description:**
+This story involves setting up a secure HTTPS endpoint for the QA environment by requesting and configuring the SSL certificate for the QA domain. As part of this task, the QA URL must be created, DNS entries updated, and the certificate applied so the application is accessible without HTTPS “red error” or browser security warnings.
 
-### **Detailed Steps:**
+**Scope includes:**
 
-1. Update **Ingress configuration** in the GKE cluster to reference the created domain (e.g., `mics.dev.cvshealth.com`).
-2. Map the GKE **Ingress service** to the **reserved static IP** used in the Cloud DNS zone.
-3. Verify routing from domain → Ingress IP → backend and frontend services.
-4. Validate that all required ports and services are reachable through the configured domain.
-5. Ensure that CI/CD pipelines (GitHub Actions + ArgoCD) correctly deploy updates to the configured domain environment.
+* Creating the QA environment URL (e.g., `qa.<your-app>.cvshealth.com`)
+* Requesting and obtaining the SSL certificate through the enterprise certificate team
+* Adding/validating DNS A/CNAME records pointing to internal load balancer
+* Uploading and configuring the certificate in GKE ingress/istio gateway
+* Verifying HTTPS handshake and ensuring no certificate warnings appear
+* Testing application accessibility over secure HTTPS
 
-### **Status Update (for today):**
+**Acceptance Criteria:**
 
-> **Status:** In Progress
->
-> **Update:**
-> Began configuration for linking the deployed application to the created domain setup in GCP. Verified that the static IP and DNS record are resolving correctly.
-> Currently updating GKE ingress rules and service annotations to map the ID Card application’s frontend and backend to the new domain. Initial tests show DNS resolution is successful; ingress routing setup is in progress.
-
----
-
-## 🧱 **TLIDCE-260 – Setup Landing page module to configure in Domain link**
-
-### **Description:**
-
-This task covers the **validation and configuration of the ID Card portal landing page** after mapping the domain.
-The objective is to ensure that the landing page loads correctly and all modules (authentication, dashboard, card view, and supporting APIs) are functional when accessed via the new domain URL.
-
-### **Detailed Steps:**
-
-1. Deploy the frontend build to the target environment (connected to GKE ingress).
-2. Verify that `https://mics.dev.cvshealth.com` correctly loads the landing page.
-3. Validate UI module connectivity with backend APIs through the domain endpoint.
-4. Ensure that all static assets (JS, CSS, images) load securely over HTTPS.
-5. Confirm that navigation and links across modules function correctly through the configured domain.
+* QA URL resolves correctly via DNS
+* SSL certificate is active and trusted
+* No browser security warnings (red HTTPS error removed)
+* Application loads successfully using the QA HTTPS URL
+* Documentation updated on how to renew/manage the certificate
 
 ---
 
-## 🧾 **TLIDCE-238 – Creation of domain name in GCP (status update)**
+# ✅ **Update Comment 1 (When work began)**
 
-> **Status:** Near Completion
->
-> **Update:**
-> Created the public DNS zone in **Cloud DNS** and mapped it with the reserved static external IP.
-> DNS propagation validated successfully using `nslookup`, confirming resolution to the correct GKE ingress IP.
-> Currently finalizing SSL certificate configuration for secure access to the domain.
-> Once HTTPS validation succeeds, the domain setup will be considered complete and ready for deployment integration.
+**Update – Initial Progress:**
+Reached out to the Infra/Certificate team to request the SSL certificate for the new QA domain. Shared the required details (domain name, purpose, environment, ownership).
+Awaiting certificate generation and DNS updates.
 
 ---
 
-✅ **Summary of updates for team communication**
+# ✅ **Update Comment 2 (Mid-progress)**
 
-| Ticket         | Description / Goal                                | Current Status                                                |
-| -------------- | ------------------------------------------------- | ------------------------------------------------------------- |
-| **TLIDCE-238** | Domain creation and DNS setup in GCP              | Near completion; SSL setup in progress                        |
-| **TLIDCE-239** | Application deployment configuration using domain | In progress; ingress mapping underway                         |
-| **TLIDCE-260** | Landing page validation through domain            | Yet to start; will begin after deployment mapping is complete |
+**Update – DNS & Certificate Setup:**
+Certificate team has issued the SSL certificate for the QA URL.
+Updated the DNS records to point to the internal load balancer IP.
+Deployed the certificate in the GKE Ingress/Istio Gateway configuration for the QA namespace.
+HTTPS handshake validation completed successfully.
 
 ---
 
-Would you like me to write your **scrum call update** (spoken summary for team) combining these three subtasks in a short, natural paragraph?
+# ✅ **Update Comment 3 (Final – After completion)**
+
+**Final Update – Story Completed:**
+HTTPS certificate installation and QA URL configuration are completed.
+The QA application is now accessible over HTTPS without any browser warnings.
+Validated end-to-end routing through gateway → virtual service → service → pods, and confirmed secured access.
+Story is now ready to be closed.
+
+---
+
+If you want, I can also write:
+✅ A detailed commit message
+✅ Release notes update
+✅ JIRA sub-task descriptions
+Or rewrite the above in a more concise/technical style.
