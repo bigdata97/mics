@@ -1,17 +1,52 @@
-Subject: Request to Add QA Redirect URI to Ping SSO Client ID (Priority)
+h1. Zion – Git Branching Strategy and Branch Protection Guide
 
-Hi Team,
-Hope you are all doing well and having a wonderful Christmas season.
+---
 
-I have created a ticket requesting the addition of the QA redirect URI to our Ping SSO Client ID. This is required to complete the QA environment setup and unblock authentication flow for our application.
+h2. 1. Purpose
+This document defines the Git branching model, branch protection rules, naming conventions, and pull request workflow for the Zion (ID Card System) repositories. The purpose is to ensure code security, auditability, consistency, and high-quality delivery across all teams.
 
-Could someone from the team please take a look and help address this request at the earliest convenience?
-This is a priority item, as we are currently blocked on QA testing until the redirect URI is added.
+---
 
-Ticket Reference: <add your ticket number here>
+h2. 2. Branching Model (CVS Git Flow)
 
-Please let me know if you need any additional details from my side.
-Thank you so much for your support!
+| Branch Type | Purpose | Created From | Merges Into |
+|-------------|---------|--------------|-------------|
+| main | Production-ready code | — | — |
+| develop | Integration for next release | main | main (via release) |
+| feature/* | Story development | develop | develop |
+| release/* | Pre-production stabilization | develop | main + develop |
+| hotfix/* | Critical production fixes | main | main + develop |
 
-Warm regards,
-<Your Name>
+---
+
+h2. 3. Branch Naming Conventions
+
+| Type | Pattern | Example |
+|------|---------|---------|
+| Feature | feature/<JiraID>-<short-desc> | feature/TLIDCE-1327-branch-protection |
+| Release | release/<major.minor.patch> | release/1.1.0 |
+| Hotfix | hotfix/<major.minor.patch> | hotfix/1.1.1 |
+
+---
+
+h2. 4. Branch Protection Rules (main & develop)
+
+* Require Pull Requests (disable direct push)
+* Minimum 2 approvals
+* Require CODEOWNERS review
+* Require signed commits
+* Require status checks to pass:
+  - build, test, lint
+  - SAST, SCA
+  - SBOM
+* Require branch to be up to date before merging
+* Enforce rules for administrators
+
+---
+
+h2. 5. CODEOWNERS Configuration
+
+CODEOWNERS file path: *.github/CODEOWNERS*
+
+Example:
+
