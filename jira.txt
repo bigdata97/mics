@@ -1,286 +1,124 @@
-Below is a **fully formatted, copy-paste-ready Confluence document**, with headings, tables, bullet points, code blocks, and an **ASCII flow diagram** (which you can easily convert into a Confluence draw.io or PlantUML diagram).
+You're looking at this annotation:
 
----
-
-# 🟦 **CONFLUENCE DOCUMENT — Git Branch Strategy & Branch Protection (Zion – ID Card System)**
-
-*(Perfectly formatted for CVS Confluence)*
-
----
-
-# **1. Overview**
-
-This document defines the **Git Branching Strategy**, **Branch Protection Rules**, **Naming Conventions**, and **PR Workflow** for the **Zion (ID Card System)** GitHub repositories.
-
-The goal is to ensure:
-
-* Consistent branching structure across teams
-* Secure development workflow
-* Mandatory code reviews & CODEOWNERS enforcement
-* Standardized release & hotfix versioning
-* Protection of critical branches (`main`, `develop`)
-
----
-
-# **2. Branching Model (CVS-Approved Git Flow)**
-
-We follow an enterprise version of **Git Flow**, customized for CVS Engineering.
-
-| Branch Type | Purpose                                 | Created From | Merged Into               |
-| ----------- | --------------------------------------- | ------------ | ------------------------- |
-| `main`      | Production-ready code                   | —            | —                         |
-| `develop`   | Integration branch for upcoming release | main         | main (via release branch) |
-| `feature/*` | Individual story / enhancements         | develop      | develop                   |
-| `release/*` | Preparation for production release      | develop      | main + develop            |
-| `hotfix/*`  | Urgent fixes for production issues      | main         | main + develop            |
-
----
-
-# **3. Branch Naming Conventions**
-
-| Branch Type | Naming Pattern                  | Example                                 |
-| ----------- | ------------------------------- | --------------------------------------- |
-| Feature     | `feature/<JiraID>-<short-desc>` | `feature/TLIDCE-1327-branch-protection` |
-| Release     | `release/<major.minor.patch>`   | `release/1.1.0`                         |
-| Hotfix      | `hotfix/<major.minor.patch>`    | `hotfix/1.1.1`                          |
-| Bugfix      | `bugfix/<JiraID>-<desc>`        | `bugfix/TLIDCE-1400-null-ref`           |
-
----
-
-# **4. Branch Protection Rules**
-
-Branch Protection is enforced on **main** and **develop** to ensure code quality, security, and compliance.
-
----
-
-## **4.1 Protection Applied to `main` and `develop`**
-
-| Rule                              | Description                                    |
-| --------------------------------- | ---------------------------------------------- |
-| **Require Pull Requests**         | No direct commits allowed.                     |
-| **Minimum 2 Approving Reviews**   | Ensures peer-reviewed code.                    |
-| **Require CODEOWNERS Review**     | Mandatory gatekeeping for critical components. |
-| **Require Status Checks to Pass** | Build, test, lint, SAST, SCA, SBOM.            |
-| **Require Branch Up-to-Date**     | Merges allowed only when branch is synced.     |
-| **Require Signed Commits**        | Enforces security & traceability.              |
-| **Enforce for Administrators**    | Prevents bypassing protections.                |
-
----
-
-## **4.2 Required Status Checks**
-
-Typical checks (GitHub Actions / Jenkins):
-
-* **build** → compilation & packaging
-* **unit-tests** → must pass
-* **lint** → code quality enforcement
-* **snyk / dependency-check** → SCA security
-* **sonar-sast** → static code scanning
-* **sbom-generation** → compliance
-* **container-scan** → image security (if applicable)
-
----
-
-# **5. CODEOWNERS Configuration**
-
-CODEOWNERS ensures that specific reviewers **must approve** before merge.
-
-File path:
-
-```
-.github/CODEOWNERS
+```yaml
+argocd.argoproj.io/sync-wave: "2"
 ```
 
-Example:
+This is an **ArgoCD sync ordering instruction**.
 
-```
-# Owners for entire repository
-*   @MadireEswar @SandhyaCVS @RashidCVS
-
-# Optional granular ownership
-/infra/*    @DevOpsTeam
-/src/*       @BackendTeam
-/ui/*        @FrontendTeam
-```
+Let me explain it clearly.
 
 ---
 
-# **6. Pull Request (PR) Workflow**
+# ✅ **What is `argocd.argoproj.io/sync-wave`?**
 
-Below is the standard workflow from feature → develop → release → main → hotfix.
+It tells ArgoCD **in which order to apply Kubernetes manifests during a Sync**.
 
----
+### In simple words:
 
-# **7. Branch Lifecycle Flow Diagram (ASCII Version)**
+**Sync-wave = the priority/sequence number for applying resources.**
 
-*(You can paste this into draw.io or a Confluence PlantUML macro for a graphical version.)*
-
-```
-                     +------------------------+
-                     |      Production        |
-                     |        (main)          |
-                     +-----------+------------+
-                                 ^
-                                 | merge (release complete)
-                      +----------+-----------+
-                      |     Release Branch   |
-                      |   (release/x.y.z)    |
-                      +----------+-----------+
-                                 ^
-                                 |
-                         Created from develop
-                                 |
-                     +-----------+-----------+
-                     |     Develop Branch    |
-                     |       (develop)       |
-                     +-----------+-----------+
-                                 ^
-                    merge PRs    |
-                                 |
-                     +-----------+-----------+
-                     |     Feature Branch    |
-                     | feature/JiraID-desc   |
-                     +-----------+-----------+
-                                 |
-                                 |
-                     Developer creates branch
-```
+Lower number = applied first
+Higher number = applied later
 
 ---
 
-## **Hotfix Flow**
+# 🔢 **How sync-waves work**
 
-```
-             +------------------------+
-             |        main            |
-             +-----------+------------+
-                         |
-                         | branch from main
-                         v
-                +--------+---------+
-                |   hotfix/x.y.z   |
-                +--------+---------+
-                         |
-                Fix → PR → merge into main
-                         |
-                         +----> also merge back into develop
+ArgoCD processes waves in order:
+
+### Wave 0 → applied first
+
+### Wave 1 → applied after wave 0
+
+### Wave 2 → applied after wave 1
+
+### Wave 3 → applied after wave 2
+
+… and so on.
+
+---
+
+# 🧠 **Why is this needed?**
+
+Some Kubernetes resources **must be created before others**.
+
+Example ordering:
+
+| Wave | Resource                 | Why?                                          |
+| ---- | ------------------------ | --------------------------------------------- |
+| 0    | Namespace                | Everything else needs it                      |
+| 1    | Secrets, ConfigMaps      | Deployment depends on it                      |
+| 2    | Services                 | Deployment readiness checks depend on Service |
+| 3    | Deployment               | Pods need Service + Secrets ready             |
+| 4    | VirtualService / Gateway | Routing only after service is running         |
+
+---
+
+# 📌 **For your case (Service.yaml)**
+
+You have:
+
+```yaml
+argocd.argoproj.io/sync-wave: "2"
 ```
 
----
+This means:
 
-# **8. End-to-End Workflow Summary**
+### 👉 ArgoCD will apply your **Service** AFTER wave 0 and wave 1 resources.
 
-### **Feature Development**
+So the expected order is:
 
-1. Developer creates:
-   `feature/TLIDCE-XXXX-short-desc`
-2. Develop code
-3. Commit → push
-4. Open PR → `develop`
-5. CI checks run
-6. 2 approvals + CODEOWNERS required
-7. Merge into `develop`
-
----
-
-### **Release Preparation**
-
-1. Release manager creates:
-   `release/x.y.z`
-2. QA validates build
-3. Fixes applied directly to release branch
-4. When approved:
-
-   * Merge `release/x.y.z` → **main**
-   * Merge `release/x.y.z` → **develop**
-
----
-
-### **Production Hotfix**
-
-1. Branch from **main**:
-   `hotfix/x.y.z`
-2. Fix, commit, push
-3. PR to main → approvals + checks
-4. After merge:
-
-   * Merge hotfix back into develop
-   * Tag release if required
-
----
-
-# **9. Implementation Steps (For DevOps Execution)**
-
-### **A. Create Branches**
-
-* `main`
-* `develop`
-* `release/x.y.z` (as needed)
-
----
-
-### **B. Configure Branch Protection Rules**
-
-1. Go to **Settings → Branches**
-2. Add Rule → Pattern: `main`
-3. Add Rule → Pattern: `develop`
-4. Enable:
-
-   * Require pull requests
-   * Require 2 approvals
-   * Require CODEOWNERS
-   * Require signed commits
-   * Require status checks
-   * Enforce admins
-
----
-
-### **C. Configure CODEOWNERS**
-
-Add `.github/CODEOWNERS` file.
-
----
-
-### **D. Document This Process in Confluence**
-
-(This document is already ready to paste.)
-
----
-
-# **10. Benefits of This Approach**
-
-| Benefit               | Explanation                                           |
-| --------------------- | ----------------------------------------------------- |
-| **Security**          | Signed commits, required reviews, protected branches. |
-| **Stability**         | Develop branch always stable for integration.         |
-| **Traceability**      | JIRA-to-branch mapping improves audit compliance.     |
-| **Consistency**       | All teams follow the same branching model.            |
-| **Quality Assurance** | Enforced CI checks prevent bad merges.                |
-
----
-
-# **11. Appendix: Example Branch Commands (Optional)**
-
-```bash
-git checkout -b develop main
-git push origin develop
-
-git checkout -b feature/TLIDCE-1327-branch-protection
-git push origin feature/TLIDCE-1327-branch-protection
-
-git checkout -b release/1.1.0 develop
-git push origin release/1.1.0
+```
+wave 0 → namespace, RBAC  
+wave 1 → secrets, configmaps  
+wave 2 → service (your file)  
+wave 3 → deployment, virtualservice  
 ```
 
+This prevents failures like:
+
+* Deployment fails because configmap or secret not created
+* Istio VS fails because Service does not exist
+* Health checks fail because Service not available
+
 ---
 
-# 🟦 **Next Steps**
+# 🎯 **Real CVS Use Case**
 
-I can also generate for you:
+CVS teams often need:
 
-✅ **PlantUML flow diagram** (import directly to Confluence)
-✅ **draw.io (XML) file** for visual diagrams
-✅ **Screenshots of GitHub branch protection settings**
-✅ **A Confluence template file (.txt) ready to upload**
+* **Secrets** first (wave 1)
+* **Service** second (wave 2)
+* **Deployment** after service (wave 3)
+* **VirtualService** after deployment (wave 4)
 
-Just tell me which format you prefer.
+This annotation ensures ArgoCD applies everything in the correct order automatically.
+
+---
+
+# 🟢 **In summary**
+
+`argocd.argoproj.io/sync-wave: "2"`
+
+Means:
+
+> “Apply this resource in wave 2 (after waves 0 and 1).
+> Apply resources with higher numbers only after this is done.”
+
+---
+
+# ⭐ Do you need help designing the correct sync-waves for all your files?
+
+I can generate a **standard ArgoCD sync-wave plan** for:
+
+* namespace.yaml
+* serviceaccount / RBAC
+* configmap
+* secret
+* service
+* deployment
+* virtualservice
+* gateways
+
+Just send the screenshots of your full folder, I’ll tell you the best wave assignments.
