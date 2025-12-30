@@ -1,52 +1,286 @@
-h1. Zion – Git Branching Strategy and Branch Protection Guide
+Below is a **fully formatted, copy-paste-ready Confluence document**, with headings, tables, bullet points, code blocks, and an **ASCII flow diagram** (which you can easily convert into a Confluence draw.io or PlantUML diagram).
 
 ---
 
-h2. 1. Purpose
-This document defines the Git branching model, branch protection rules, naming conventions, and pull request workflow for the Zion (ID Card System) repositories. The purpose is to ensure code security, auditability, consistency, and high-quality delivery across all teams.
+# 🟦 **CONFLUENCE DOCUMENT — Git Branch Strategy & Branch Protection (Zion – ID Card System)**
+
+*(Perfectly formatted for CVS Confluence)*
 
 ---
 
-h2. 2. Branching Model (CVS Git Flow)
+# **1. Overview**
 
-| Branch Type | Purpose | Created From | Merges Into |
-|-------------|---------|--------------|-------------|
-| main | Production-ready code | — | — |
-| develop | Integration for next release | main | main (via release) |
-| feature/* | Story development | develop | develop |
-| release/* | Pre-production stabilization | develop | main + develop |
-| hotfix/* | Critical production fixes | main | main + develop |
+This document defines the **Git Branching Strategy**, **Branch Protection Rules**, **Naming Conventions**, and **PR Workflow** for the **Zion (ID Card System)** GitHub repositories.
 
----
+The goal is to ensure:
 
-h2. 3. Branch Naming Conventions
-
-| Type | Pattern | Example |
-|------|---------|---------|
-| Feature | feature/<JiraID>-<short-desc> | feature/TLIDCE-1327-branch-protection |
-| Release | release/<major.minor.patch> | release/1.1.0 |
-| Hotfix | hotfix/<major.minor.patch> | hotfix/1.1.1 |
+* Consistent branching structure across teams
+* Secure development workflow
+* Mandatory code reviews & CODEOWNERS enforcement
+* Standardized release & hotfix versioning
+* Protection of critical branches (`main`, `develop`)
 
 ---
 
-h2. 4. Branch Protection Rules (main & develop)
+# **2. Branching Model (CVS-Approved Git Flow)**
 
-* Require Pull Requests (disable direct push)
-* Minimum 2 approvals
-* Require CODEOWNERS review
-* Require signed commits
-* Require status checks to pass:
-  - build, test, lint
-  - SAST, SCA
-  - SBOM
-* Require branch to be up to date before merging
-* Enforce rules for administrators
+We follow an enterprise version of **Git Flow**, customized for CVS Engineering.
+
+| Branch Type | Purpose                                 | Created From | Merged Into               |
+| ----------- | --------------------------------------- | ------------ | ------------------------- |
+| `main`      | Production-ready code                   | —            | —                         |
+| `develop`   | Integration branch for upcoming release | main         | main (via release branch) |
+| `feature/*` | Individual story / enhancements         | develop      | develop                   |
+| `release/*` | Preparation for production release      | develop      | main + develop            |
+| `hotfix/*`  | Urgent fixes for production issues      | main         | main + develop            |
 
 ---
 
-h2. 5. CODEOWNERS Configuration
+# **3. Branch Naming Conventions**
 
-CODEOWNERS file path: *.github/CODEOWNERS*
+| Branch Type | Naming Pattern                  | Example                                 |
+| ----------- | ------------------------------- | --------------------------------------- |
+| Feature     | `feature/<JiraID>-<short-desc>` | `feature/TLIDCE-1327-branch-protection` |
+| Release     | `release/<major.minor.patch>`   | `release/1.1.0`                         |
+| Hotfix      | `hotfix/<major.minor.patch>`    | `hotfix/1.1.1`                          |
+| Bugfix      | `bugfix/<JiraID>-<desc>`        | `bugfix/TLIDCE-1400-null-ref`           |
+
+---
+
+# **4. Branch Protection Rules**
+
+Branch Protection is enforced on **main** and **develop** to ensure code quality, security, and compliance.
+
+---
+
+## **4.1 Protection Applied to `main` and `develop`**
+
+| Rule                              | Description                                    |
+| --------------------------------- | ---------------------------------------------- |
+| **Require Pull Requests**         | No direct commits allowed.                     |
+| **Minimum 2 Approving Reviews**   | Ensures peer-reviewed code.                    |
+| **Require CODEOWNERS Review**     | Mandatory gatekeeping for critical components. |
+| **Require Status Checks to Pass** | Build, test, lint, SAST, SCA, SBOM.            |
+| **Require Branch Up-to-Date**     | Merges allowed only when branch is synced.     |
+| **Require Signed Commits**        | Enforces security & traceability.              |
+| **Enforce for Administrators**    | Prevents bypassing protections.                |
+
+---
+
+## **4.2 Required Status Checks**
+
+Typical checks (GitHub Actions / Jenkins):
+
+* **build** → compilation & packaging
+* **unit-tests** → must pass
+* **lint** → code quality enforcement
+* **snyk / dependency-check** → SCA security
+* **sonar-sast** → static code scanning
+* **sbom-generation** → compliance
+* **container-scan** → image security (if applicable)
+
+---
+
+# **5. CODEOWNERS Configuration**
+
+CODEOWNERS ensures that specific reviewers **must approve** before merge.
+
+File path:
+
+```
+.github/CODEOWNERS
+```
 
 Example:
 
+```
+# Owners for entire repository
+*   @MadireEswar @SandhyaCVS @RashidCVS
+
+# Optional granular ownership
+/infra/*    @DevOpsTeam
+/src/*       @BackendTeam
+/ui/*        @FrontendTeam
+```
+
+---
+
+# **6. Pull Request (PR) Workflow**
+
+Below is the standard workflow from feature → develop → release → main → hotfix.
+
+---
+
+# **7. Branch Lifecycle Flow Diagram (ASCII Version)**
+
+*(You can paste this into draw.io or a Confluence PlantUML macro for a graphical version.)*
+
+```
+                     +------------------------+
+                     |      Production        |
+                     |        (main)          |
+                     +-----------+------------+
+                                 ^
+                                 | merge (release complete)
+                      +----------+-----------+
+                      |     Release Branch   |
+                      |   (release/x.y.z)    |
+                      +----------+-----------+
+                                 ^
+                                 |
+                         Created from develop
+                                 |
+                     +-----------+-----------+
+                     |     Develop Branch    |
+                     |       (develop)       |
+                     +-----------+-----------+
+                                 ^
+                    merge PRs    |
+                                 |
+                     +-----------+-----------+
+                     |     Feature Branch    |
+                     | feature/JiraID-desc   |
+                     +-----------+-----------+
+                                 |
+                                 |
+                     Developer creates branch
+```
+
+---
+
+## **Hotfix Flow**
+
+```
+             +------------------------+
+             |        main            |
+             +-----------+------------+
+                         |
+                         | branch from main
+                         v
+                +--------+---------+
+                |   hotfix/x.y.z   |
+                +--------+---------+
+                         |
+                Fix → PR → merge into main
+                         |
+                         +----> also merge back into develop
+```
+
+---
+
+# **8. End-to-End Workflow Summary**
+
+### **Feature Development**
+
+1. Developer creates:
+   `feature/TLIDCE-XXXX-short-desc`
+2. Develop code
+3. Commit → push
+4. Open PR → `develop`
+5. CI checks run
+6. 2 approvals + CODEOWNERS required
+7. Merge into `develop`
+
+---
+
+### **Release Preparation**
+
+1. Release manager creates:
+   `release/x.y.z`
+2. QA validates build
+3. Fixes applied directly to release branch
+4. When approved:
+
+   * Merge `release/x.y.z` → **main**
+   * Merge `release/x.y.z` → **develop**
+
+---
+
+### **Production Hotfix**
+
+1. Branch from **main**:
+   `hotfix/x.y.z`
+2. Fix, commit, push
+3. PR to main → approvals + checks
+4. After merge:
+
+   * Merge hotfix back into develop
+   * Tag release if required
+
+---
+
+# **9. Implementation Steps (For DevOps Execution)**
+
+### **A. Create Branches**
+
+* `main`
+* `develop`
+* `release/x.y.z` (as needed)
+
+---
+
+### **B. Configure Branch Protection Rules**
+
+1. Go to **Settings → Branches**
+2. Add Rule → Pattern: `main`
+3. Add Rule → Pattern: `develop`
+4. Enable:
+
+   * Require pull requests
+   * Require 2 approvals
+   * Require CODEOWNERS
+   * Require signed commits
+   * Require status checks
+   * Enforce admins
+
+---
+
+### **C. Configure CODEOWNERS**
+
+Add `.github/CODEOWNERS` file.
+
+---
+
+### **D. Document This Process in Confluence**
+
+(This document is already ready to paste.)
+
+---
+
+# **10. Benefits of This Approach**
+
+| Benefit               | Explanation                                           |
+| --------------------- | ----------------------------------------------------- |
+| **Security**          | Signed commits, required reviews, protected branches. |
+| **Stability**         | Develop branch always stable for integration.         |
+| **Traceability**      | JIRA-to-branch mapping improves audit compliance.     |
+| **Consistency**       | All teams follow the same branching model.            |
+| **Quality Assurance** | Enforced CI checks prevent bad merges.                |
+
+---
+
+# **11. Appendix: Example Branch Commands (Optional)**
+
+```bash
+git checkout -b develop main
+git push origin develop
+
+git checkout -b feature/TLIDCE-1327-branch-protection
+git push origin feature/TLIDCE-1327-branch-protection
+
+git checkout -b release/1.1.0 develop
+git push origin release/1.1.0
+```
+
+---
+
+# 🟦 **Next Steps**
+
+I can also generate for you:
+
+✅ **PlantUML flow diagram** (import directly to Confluence)
+✅ **draw.io (XML) file** for visual diagrams
+✅ **Screenshots of GitHub branch protection settings**
+✅ **A Confluence template file (.txt) ready to upload**
+
+Just tell me which format you prefer.
