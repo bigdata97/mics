@@ -1,0 +1,128 @@
+Perfect — this is a classic “show-and-tell” demo setup for a sprint review, and you’ve actually delivered two very impactful CI/CD enhancements 👏
+
+Below is a **professionally written, ready-to-speak demo script + agenda outline** that sounds natural, confident, and technical — exactly how you’d present in front of your team or leadership.
+
+---
+
+# 🧑‍💻 **Sprint Demo Script — Dynamic Deployment Environment in CI/CD**
+
+---
+
+### 👋 **1️⃣ Opening — Casual, Context-Setting Introduction**
+
+> “Hi everyone, good afternoon.
+> In this demo, I’ll be walking you through the enhancements I’ve implemented in our CI/CD workflow during this sprint.
+>
+> Specifically, there are **two major improvements** that I’ll be showcasing today:
+>
+> 1️⃣ **Dynamic environment selection** during pipeline execution — where we can now choose the target deployment environment (like dev, QA, UAT, etc.) directly from the workflow trigger UI.
+>
+> 2️⃣ A **visual enhancement in our build stage labels** — the selected environment name now appears directly on the build stages, making it easier for everyone to identify which environment the current build is targeting at a glance.”
+
+---
+
+### 🧭 **2️⃣ Brief Agenda**
+
+> “So my demo will have three short parts:
+>
+> * First, I’ll show how the environment selection input is available while manually triggering the workflow.
+> * Next, I’ll show how that input dynamically controls our Docker build process by passing it as a build-time variable.
+> * And finally, I’ll show how the chosen environment gets displayed right on the build stage name — which is a small change but makes our pipelines much more readable and self-explanatory.”
+
+---
+
+### ⚙️ **3️⃣ Part 1 — Dynamic Environment Selection**
+
+> “Earlier, our CI workflow was static — the environment was hardcoded inside the YAML file, which meant we had to modify the pipeline file or maintain separate workflows for different environments like dev, QA, or UAT.
+>
+> Now, I’ve added an **input parameter** using the `workflow_dispatch` event in our GitHub Actions file.
+>
+> When we go to manually trigger the workflow from the ‘Actions’ tab, we can now see a dropdown field named `Deployment Environment`.
+> This dropdown contains values like `dev`, `qa`, `uat`, and `prod`.
+>
+> When someone runs the workflow, they can select the desired environment from that dropdown, and that selection will automatically flow through the subsequent stages.”
+
+*(Show screen where dropdown appears in “Run workflow” modal.)*
+
+---
+
+### 🧩 **4️⃣ Part 2 — Passing Environment Dynamically to Docker Build**
+
+> “The selected environment value is then captured as a variable called `deployment_environment`, and this is passed as a **Docker build-time argument**.
+>
+> Specifically, I’m injecting it into the build step like this:
+>
+> ```yaml
+> docker build \
+>   --build-arg vite_app_env=${{ github.event.inputs.deployment_environment }} \
+>   -t our-image-name .
+> ```
+>
+> Inside our application code, this `vite_app_env` variable is consumed to decide which set of environment-specific parameters to use — for example, base URLs, URIs, API endpoints, or client configurations.
+>
+> So essentially, we’ve eliminated all hardcoding and made the workflow environment-agnostic.”
+
+*(Show Docker build log showing `vite_app_env` being passed.)*
+
+---
+
+### 🎨 **5️⃣ Part 3 — Displaying Environment Name on Build Stages**
+
+> “The second improvement is a visibility enhancement.
+> Earlier, when we ran our workflows, all builds just said ‘Build Image’ or ‘Docker Build’.
+>
+> Now, I’ve modified the workflow YAML so that the **stage name dynamically includes the selected environment** — for example:
+>
+> * `Build Image (DEV)`
+> * `Build Image (QA)`
+> * `Build Image (UAT)`
+>
+> This makes it super easy for anyone viewing the Actions tab or logs to instantly know which environment the build was targeting, without even opening the detailed logs.
+>
+> It’s a small change, but it really improves readability and clarity for both developers and release managers.”
+
+*(Show Actions pipeline UI where job name includes environment name dynamically.)*
+
+---
+
+### 🚀 **6️⃣ Impact and Benefits**
+
+> “With these two changes:
+>
+> * We no longer need separate workflows for each environment.
+> * The build process has become fully parameterized and reusable.
+> * It reduces human error, since we can visually confirm the environment from the stage name itself.
+> * It improves traceability — the environment context is now visible both in logs and in job labels.”
+
+---
+
+### ✅ **7️⃣ Summary**
+
+> “So to summarize:
+>
+> * I’ve implemented dynamic environment selection in our CI workflow.
+> * The selected environment automatically propagates through the build and runtime layers.
+> * And the build stage labels now clearly show the environment context.
+>
+> That’s all for my demo — thank you!
+> If anyone wants, I can show the YAML changes that make this possible right after this.”
+
+---
+
+### 💡 **Bonus Tip (if they ask for technical details)**
+
+You can quickly add:
+
+> “The key enhancement is inside the `on.workflow_dispatch.inputs` section and the way we use `${{ github.event.inputs.deployment_environment }}` variable in both build arguments and job names.
+>
+> For example:
+>
+> ```yaml
+> name: Build Image (${{ github.event.inputs.deployment_environment }})
+> ```
+>
+> This automatically appends the selected environment name to the job title dynamically.”
+
+---
+
+Would you like me to convert this into a **Confluence-style summary version** too (with bullet points and screenshots placeholders) that you can paste into your sprint demo documentation afterward?
