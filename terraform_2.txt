@@ -1,3 +1,170 @@
+import os
+import re
+import shutil
+
+# ========= CONFIG =========
+SOURCE_TF_FILE = "./gcs_terraform_export.tf"
+TARGET_ROOT = "./terraform-gcp-infra"
+
+GCS_MODULE_DIR = f"{TARGET_ROOT}/modules/gcs"
+ENVS = ["dev", "qa", "prod"]
+
+# ========= CREATE FOLDER STRUCTURE =========
+os.makedirs(GCS_MODULE_DIR, exist_ok=True)
+
+for env in ENVS:
+    os.makedirs(f"{TARGET_ROOT}/envs/{env}", exist_ok=True)
+
+os.makedirs(f"{TARGET_ROOT}/tfvars", exist_ok=True)
+
+# ========= READ SOURCE FILE =========
+with open(SOURCE_TF_FILE, "r") as f:
+    content = f.read()
+
+# ========= EXTRACT BUCKET RESOURCES =========
+bucket_resources = re.findall(
+    r'resource\s+"google_storage_bucket"\s+"[^"]+"\s+{[\s\S]*?^}',
+    content,
+    re.MULTILINE
+)
+
+# ========= SPLIT LIFECYCLE RULES =========
+bucket_main_blocks = []
+lifecycle_blocks = []
+
+for block in bucket_resources:
+    lifecycle = re.search(
+        r'lifecycle_rule\s+{[\s\S]*?}',
+        block,
+        re.MULTILINE
+    )
+
+    if lifecycle:
+        lifecycle_blocks.append(lifecycle.group())
+        block = block.replace(lifecycle.group(), "")
+
+    bucket_main_blocks.append(block)
+
+# ========= WRITE module/gcs/main.tf =========
+with open(f"{GCS_MODULE_DIR}/main.tf", "w") as f:
+    f.write("\n\n".join(bucket_main_blocks))
+
+# ========= WRITE module/gcs/lifecycle.tf =========
+with open(f"{GCS_MODULE_DIR}/lifecycle.tf", "w") as f:
+    for lc in lifecycle_blocks:
+        f.write(
+            f"""
+resource "google_storage_bucket" "lifecycle_placeholder" {{
+{lc}
+}}
+"""
+        )
+
+# ========= WRITE PLACEHOLDERS =========
+files_with_placeholders = {
+    "iam.tf": "# Bucket IAM bindings will be added after review\n",
+    "variables.tf": "# GCS module variables\n",
+    "outputs.tf": "# GCS module outputs\n",
+}
+
+for file, content in files_with_placeholders.items():
+    with open(f"{GCS_MODULE_DIR}/{file}", "w") as f:
+        f.write(content)
+
+# ========= ROOT FILES =========
+root_files = {
+    "providers.tf": """provider "google" {}""",
+    "backend.tf": "# Backend config will be enabled after approval\n",
+    "main.tf": """module "gcs" {
+  source = "./modules/gcs"
+}""",
+    "variables.tf": "# Root variables\n",
+    "outputs.tf": "# Root outputs\n",
+    "README.md": "# Terraform GCP Infra\n",
+}
+
+for file, content in root_files.items():
+    with open(f"{TARGET_ROOT}/{file}", "w") as f:
+        f.write(content)
+
+# ========= ENV FILES =========
+for env in ENVS:
+    with open(f"{TARGET_ROOT}/envs/{env}/main.tf", "w") as f:
+        f.write(
+            f"""module "gcs" {{
+  source = "../../modules/gcs"
+}}"""
+        )
+
+# ========= TFVARS =========
+for env in ENVS:
+    with open(f"{TARGET_ROOT}/tfvars/hcb-{env}.tfvars", "w") as f:
+        f.write("# Environment specific values\n")
+
+print("✅ GCS Terraform export reorganized into GitHub repo structure successfully")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-============================================================================================================
+
+
 Perfect 👍 — that’s a **very common and very correct ask from leads**, especially in enterprise setups.
 
 Let me break this down **clearly**, and then I’ll give you **exactly what to do**, **what to commit**, and **what status to report**.
