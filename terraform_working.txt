@@ -1,0 +1,532 @@
+Below is a complete, **end-to-end solution** that matches your **target repo format**, supports **plan first → review → apply**, uses **GitHub Actions for CI**, and fits **ArgoCD for CD** (with the key reality: **ArgoCD does not run Terraform by itself** unless you use a Terraform runner like **ArgoCD + Terraform Controller/Operator** or **ArgoCD plugin**).
+
+Since your lead wants **plan first**, we’ll design:
+
+* ✅ **PR → Terraform Plan (CI)**
+* ✅ **After merge / manual approval → Terraform Apply (CI)**
+* ✅ ArgoCD continues to manage **K8s manifests**, not Terraform (unless you add a Terraform controller)
+
+And we’ll make tfvars the single place where you provide:
+
+* bucket definitions
+* kms
+* lifecycle settings
+* labels
+* etc.
+
+---
+
+# A) Final GitHub Repo Structure (your screenshot format + CI/CD)
+
+```
+terraform-gcp-infra/
+├── modules/
+│   └── gcs/
+│       ├── main.tf
+│       ├── variables.tf
+│       ├── outputs.tf
+│       ├── iam.tf
+│       └── README.md
+├── envs/
+│   ├── dev/main.tf
+│   ├── qa/main.tf
+│   └── prod/main.tf
+├── tfvars/
+│   ├── hcb-dev.tfvars
+│   ├── hcb-qa.tfvars
+│   └── hcb-prod.tfvars
+├── backend.tf
+├── providers.tf
+├── main.tf
+├── variables.tf
+├── outputs.tf
+├── README.md
+└── .github/
+    └── workflows/
+        ├── terraform-plan.yml
+        └── terraform-apply.yml
+```
+
+---
+
+# B) Terraform Design: tfvars drives everything
+
+## 1) Root `variables.tf`
+
+This defines inputs that your tfvars will fill.
+
+```hcl
+variable "project_id" {
+  type        = string
+  description = "GCP Project ID"
+}
+
+variable "region" {
+  type        = string
+  description = "Default region"
+}
+
+variable "environment" {
+  type        = string
+  description = "Environment name (dev/qa/prod)"
+}
+
+# All bucket definitions live here (this is what you fill in tfvars)
+variable "gcs_buckets" {
+  description = "Map of GCS buckets and their settings"
+  type = map(object({
+    location              = string
+    storage_class         = string
+    uniform_access        = bool
+    public_access_prevention = string
+
+    labels = map(string)
+
+    # encryption
+    kms_key_name = string
+
+    # soft delete
+    retention_duration_seconds = number
+
+    # versioning
+    versioning_enabled = bool
+
+    # lifecycle
+    lifecycle = object({
+      enabled            = bool
+      action_type        = string
+      num_newer_versions = number
+      with_state         = string
+    })
+  }))
+}
+```
+
+---
+
+## 2) Root `providers.tf`
+
+```hcl
+terraform {
+  required_version = ">= 1.5.0"
+
+  required_providers {
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 5.0"
+    }
+  }
+}
+
+provider "google" {
+  project = var.project_id
+  region  = var.region
+}
+```
+
+---
+
+## 3) Root `main.tf` (wires module)
+
+```hcl
+module "gcs" {
+  source      = "./modules/gcs"
+  project_id  = var.project_id
+  buckets     = var.gcs_buckets
+}
+```
+
+---
+
+## 4) Root `outputs.tf`
+
+```hcl
+output "gcs_bucket_names" {
+  value = module.gcs.bucket_names
+}
+```
+
+---
+
+## 5) Root `backend.tf` (recommended remote state)
+
+Your lead will likely want a remote backend. Use a dedicated state bucket.
+
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "YOUR_TF_STATE_BUCKET_NAME"
+    prefix = "terraform-gcp-infra"
+  }
+}
+```
+
+> If backend bucket is not finalized yet, keep placeholder but CI will need a backend to avoid local state.
+
+---
+
+# C) GCS Module (modules/gcs)
+
+## 1) `modules/gcs/variables.tf`
+
+```hcl
+variable "project_id" {
+  type        = string
+  description = "Project id"
+}
+
+variable "buckets" {
+  type = map(object({
+    location                 = string
+    storage_class            = string
+    uniform_access           = bool
+    public_access_prevention = string
+    labels                   = map(string)
+    kms_key_name             = string
+    retention_duration_seconds = number
+    versioning_enabled       = bool
+
+    lifecycle = object({
+      enabled            = bool
+      action_type        = string
+      num_newer_versions = number
+      with_state         = string
+    })
+  }))
+}
+```
+
+---
+
+## 2) `modules/gcs/main.tf` (everything driven by tfvars)
+
+This is the key file.
+
+```hcl
+resource "google_storage_bucket" "this" {
+  for_each = var.buckets
+
+  name     = each.key
+  project  = var.project_id
+  location = each.value.location
+
+  storage_class               = each.value.storage_class
+  uniform_bucket_level_access = each.value.uniform_access
+  public_access_prevention    = each.value.public_access_prevention
+  labels                      = each.value.labels
+
+  force_destroy = false
+
+  encryption {
+    default_kms_key_name = each.value.kms_key_name
+  }
+
+  soft_delete_policy {
+    retention_duration_seconds = each.value.retention_duration_seconds
+  }
+
+  versioning {
+    enabled = each.value.versioning_enabled
+  }
+
+  dynamic "lifecycle_rule" {
+    for_each = each.value.lifecycle.enabled ? [1] : []
+    content {
+      action {
+        type = each.value.lifecycle.action_type
+      }
+      condition {
+        num_newer_versions = each.value.lifecycle.num_newer_versions
+        with_state         = each.value.lifecycle.with_state
+      }
+    }
+  }
+}
+```
+
+✅ This solves your earlier “lifecycle in separate file” problem cleanly
+because lifecycle is still **inside the same resource**, but controlled by tfvars.
+
+---
+
+## 3) `modules/gcs/outputs.tf`
+
+```hcl
+output "bucket_names" {
+  value = keys(google_storage_bucket.this)
+}
+```
+
+---
+
+## 4) `modules/gcs/iam.tf` (placeholder)
+
+```hcl
+# gcloud bulk export doesn't export IAM.
+# Add IAM resources after plan review:
+#
+# resource "google_storage_bucket_iam_binding" "bucket_admins" {
+#   for_each = google_storage_bucket.this
+#   bucket   = each.value.name
+#   role     = "roles/storage.admin"
+#   members  = ["serviceAccount:xxx@yyy.iam.gserviceaccount.com"]
+# }
+```
+
+---
+
+# D) tfvars example (THIS is where you put bucket info)
+
+## `tfvars/hcb-dev.tfvars`
+
+This will contain your bucket(s) from the export.
+
+```hcl
+project_id   = "hcb-nonprod-mics"
+region       = "us-east4"
+environment  = "dev"
+
+gcs_buckets = {
+  "gcf-v2-sources-12536452211-648358102" = {
+    location                 = "US-EAST4"
+    storage_class            = "STANDARD"
+    uniform_access           = true
+    public_access_prevention = "inherited"
+
+    labels = {
+      goog-managed-by = "cloudfunctions"
+      managed-by-cnrm = "true"
+    }
+
+    kms_key_name               = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
+    retention_duration_seconds = 604800
+    versioning_enabled         = true
+
+    lifecycle = {
+      enabled            = true
+      action_type        = "Delete"
+      num_newer_versions = 3
+      with_state         = "ARCHIVED"
+    }
+  }
+
+  "gcf-v2-sources-12536452211-us-central1" = {
+    location                 = "US-CENTRAL1"
+    storage_class            = "STANDARD"
+    uniform_access           = true
+    public_access_prevention = "inherited"
+
+    labels = {
+      goog-managed-by = "cloudfunctions"
+      managed-by-cnrm = "true"
+    }
+
+    kms_key_name               = "projects/cvs-key-vault-nonprod/locations/us-central1/keyRings/gkr-nonprod-us-central1/cryptoKeys/gk-hcb-nonprod-mics-us-central1"
+    retention_duration_seconds = 604800
+    versioning_enabled         = true
+
+    lifecycle = {
+      enabled            = true
+      action_type        = "Delete"
+      num_newer_versions = 3
+      with_state         = "ARCHIVED"
+    }
+  }
+}
+```
+
+✅ Now you only change tfvars for env changes.
+
+---
+
+# E) CI/CD with GitHub Actions
+
+## E1) CI: Terraform Plan on PR
+
+Create `.github/workflows/terraform-plan.yml`
+
+```yaml
+name: terraform-plan
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Environment"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+
+    env:
+      TF_IN_AUTOMATION: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Auth using Workload Identity Federation is best.
+      # Replace with your org standard auth.
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_TF_SA }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        run: |
+          ENV_NAME="${{ github.event.inputs.env }}"
+          if [ -z "$ENV_NAME" ]; then ENV_NAME="dev"; fi
+          terraform plan -var-file="tfvars/hcb-${ENV_NAME}.tfvars" -out="tfplan"
+
+      - name: Upload Plan Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+```
+
+✅ Plan runs automatically
+✅ Stores `tfplan` as artifact for review
+
+---
+
+## E2) Apply workflow (manual approval / gated)
+
+Create `.github/workflows/terraform-apply.yml`
+
+```yaml
+name: terraform-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      env:
+        description: "Environment"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    environment:
+      name: terraform-apply-approval  # GitHub Environments approval gate
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_TF_SA }}
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Apply
+        run: |
+          ENV_NAME="${{ github.event.inputs.env }}"
+          terraform apply -var-file="tfvars/hcb-${ENV_NAME}.tfvars" -auto-approve
+```
+
+✅ Apply is manual
+✅ Uses GitHub Environment approvals (`terraform-apply-approval`) so lead can approve
+
+---
+
+# F) Where ArgoCD fits (important truth)
+
+ArgoCD is for Kubernetes manifests (Helm/Kustomize/YAML).
+Terraform is **not** applied by ArgoCD unless you add one of these:
+
+### Option 1 (recommended in orgs): Terraform in GitHub Actions only
+
+* ✅ simplest
+* ✅ fits your toolchain
+* ✅ clean approvals
+
+### Option 2: ArgoCD + Terraform Controller (CRDs)
+
+Terraform runs in cluster via controller. (More work, needs platform approval.)
+
+Given your story: **GitHub Actions should handle Terraform plan/apply**.
+ArgoCD continues to deploy your app resources.
+
+---
+
+# G) How values flow from tfvars everywhere
+
+Example flow:
+
+`tfvars/hcb-dev.tfvars` → fills:
+
+* `var.project_id`
+* `var.region`
+* `var.gcs_buckets`
+
+Then root `main.tf` passes `var.gcs_buckets` into module:
+
+`module "gcs" { buckets = var.gcs_buckets }`
+
+Then module uses:
+
+`for_each = var.buckets`
+
+So buckets are created based on tfvars map keys and settings.
+
+✅ This is exactly what you asked: **“Provide bucket name in tfvars and everything else uses it.”**
+
+---
+
+# H) Commands you’ll run locally (same as CI)
+
+```bash
+terraform init
+terraform validate
+terraform plan -var-file=tfvars/hcb-dev.tfvars
+terraform apply -var-file=tfvars/hcb-dev.tfvars
+```
+
+---
+
+## If you want, I can also give you:
+
+* A `README.md` section for your repo explaining plan/apply flows
+* How to add `terraform fmt` + `tflint` + `checkov` steps in plan pipeline
+* How to generate `terraform import` commands from your exported file
+
+But the above is the full working repo + CI/CD plan/apply design aligned to your tools.
