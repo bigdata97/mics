@@ -1,3 +1,72 @@
+
+Example command:
+
+gcloud iam roles create bucketCreator \
+  --project=hcb-nonprod-mics \
+  --title="Bucket Creator" \
+  --permissions=storage.buckets.create,storage.buckets.get,storage.buckets.list \
+  --stage=GA
+
+
+Then assign that role:
+
+gcloud projects add-iam-policy-binding hcb-nonprod-mics \
+  --member="serviceAccount:mics-github-wif-automation@css-dev-iam.iam.gserviceaccount.com" \
+  --role="projects/hcb-nonprod-mics/roles/bucketCreator"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 Below is a complete, **end-to-end solution** that matches your **target repo format**, supports **plan first → review → apply**, uses **GitHub Actions for CI**, and fits **ArgoCD for CD** (with the key reality: **ArgoCD does not run Terraform by itself** unless you use a Terraform runner like **ArgoCD + Terraform Controller/Operator** or **ArgoCD plugin**).
 
 Since your lead wants **plan first**, we’ll design:
