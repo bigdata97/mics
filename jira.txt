@@ -1,124 +1,300 @@
-You're looking at this annotation:
+Perfect 👍 — below is your **Confluence-ready version** of the same **QA Environment Setup Guide** for your **HCB-NonProd-MICS (ID Card Excellence)** project.
 
-```yaml
-argocd.argoproj.io/sync-wave: "2"
-```
-
-This is an **ArgoCD sync ordering instruction**.
-
-Let me explain it clearly.
+This version uses **Confluence macros**, collapsible sections, and `{code}` blocks for commands — so you can **copy-paste directly** into your Confluence page and it will automatically format beautifully with expandable sections, syntax highlighting, and tables.
 
 ---
 
-# ✅ **What is `argocd.argoproj.io/sync-wave`?**
-
-It tells ArgoCD **in which order to apply Kubernetes manifests during a Sync**.
-
-### In simple words:
-
-**Sync-wave = the priority/sequence number for applying resources.**
-
-Lower number = applied first
-Higher number = applied later
+# 🧭 QA Environment Setup — *HCB-NonProd-MICS (ID Card Excellence)*
 
 ---
 
-# 🔢 **How sync-waves work**
+## 🧾 Overview
 
-ArgoCD processes waves in order:
+The purpose of this document is to outline the **end-to-end setup** for the **QA environment** of the *ID Card Excellence* microservices project (`hcb-nonprod-mics`).
 
-### Wave 0 → applied first
+This setup includes:
 
-### Wave 1 → applied after wave 0
-
-### Wave 2 → applied after wave 1
-
-### Wave 3 → applied after wave 2
-
-… and so on.
-
----
-
-# 🧠 **Why is this needed?**
-
-Some Kubernetes resources **must be created before others**.
-
-Example ordering:
-
-| Wave | Resource                 | Why?                                          |
-| ---- | ------------------------ | --------------------------------------------- |
-| 0    | Namespace                | Everything else needs it                      |
-| 1    | Secrets, ConfigMaps      | Deployment depends on it                      |
-| 2    | Services                 | Deployment readiness checks depend on Service |
-| 3    | Deployment               | Pods need Service + Secrets ready             |
-| 4    | VirtualService / Gateway | Routing only after service is running         |
+* Creation of a dedicated **QA namespace**
+* **Service Account** creation and IAM permissions
+* Annotated access for **Workload Identity Federation**
+* Setup of **MICS_QA Client in PingID**
+* Configuration of **QA hostname and redirect URIs**
+* Access provisioning for DevOps, QA, and Developers
+* Validation through **ArgoCD deployment**
 
 ---
 
-# 📌 **For your case (Service.yaml)**
+## 🧩 Prerequisites
 
-You have:
+* Access to GCP Console with role: *Project Editor or higher*
+* Access to **PingID Admin Console**
+* GitHub repo permissions for workflow configuration
+* ArgoCD access for application deployment
+* GKE cluster access via:
+  {code:bash}
+  gcloud container clusters get-credentials mics-nonprod-gke --region us-central1 --project hcb-nonprod-mics
+  {code}
 
-```yaml
-argocd.argoproj.io/sync-wave: "2"
-```
+---
 
-This means:
+## 🏗️ Step 1 — Create QA Namespace
 
-### 👉 ArgoCD will apply your **Service** AFTER wave 0 and wave 1 resources.
+{expand:title=Click to view commands}
+Create the QA namespace to isolate application resources.
+{code:bash}
+kubectl create namespace mics-nonprod-qa
+{code}
 
-So the expected order is:
+**Verify:**
+{code:bash}
+kubectl get namespaces
+{code}
+
+**Expected Output:**
 
 ```
-wave 0 → namespace, RBAC  
-wave 1 → secrets, configmaps  
-wave 2 → service (your file)  
-wave 3 → deployment, virtualservice  
+NAME                STATUS   AGE
+default             Active   12d
+mics-nonprod-dev    Active   10d
+mics-nonprod-qa     Active   2s
 ```
 
-This prevents failures like:
-
-* Deployment fails because configmap or secret not created
-* Istio VS fails because Service does not exist
-* Health checks fail because Service not available
+{expand}
 
 ---
 
-# 🎯 **Real CVS Use Case**
+## 🔐 Step 2 — Create Service Account
 
-CVS teams often need:
+{expand:title=Click to view commands}
+Create a service account specific to the QA environment.
 
-* **Secrets** first (wave 1)
-* **Service** second (wave 2)
-* **Deployment** after service (wave 3)
-* **VirtualService** after deployment (wave 4)
+{code:bash}
+gcloud iam service-accounts create qa-idcard-app-sa 
+--description="Service Account for MICS QA environment" 
+--display-name="QA ID Card Application SA"
+{code}
 
-This annotation ensures ArgoCD applies everything in the correct order automatically.
-
----
-
-# 🟢 **In summary**
-
-`argocd.argoproj.io/sync-wave: "2"`
-
-Means:
-
-> “Apply this resource in wave 2 (after waves 0 and 1).
-> Apply resources with higher numbers only after this is done.”
+**Verify:**
+{code:bash}
+gcloud iam service-accounts list | grep qa-idcard-app-sa
+{code}
+{expand}
 
 ---
 
-# ⭐ Do you need help designing the correct sync-waves for all your files?
+## 🧰 Step 3 — Assign IAM Roles
 
-I can generate a **standard ArgoCD sync-wave plan** for:
+{expand:title=Click to view commands and roles}
+Assign the following IAM roles for GCP resource access.
 
-* namespace.yaml
-* serviceaccount / RBAC
-* configmap
-* secret
-* service
-* deployment
-* virtualservice
-* gateways
+| Role                                 | Purpose                              |
+| ------------------------------------ | ------------------------------------ |
+| `roles/storage.admin`                | Manage GCS buckets and lifecycle     |
+| `roles/storage.objectAdmin`          | Read/write objects in QA GCS buckets |
+| `roles/run.invoker`                  | Invoke Cloud Run services            |
+| `roles/secretmanager.secretAccessor` | Access environment-specific secrets  |
+| `roles/logging.logWriter`            | Write application logs               |
+| `roles/monitoring.viewer`            | Read metrics                         |
+| `roles/pubsub.editor`                | Manage Pub/Sub topics                |
 
-Just send the screenshots of your full folder, I’ll tell you the best wave assignments.
+{code:bash}
+PROJECT_ID=hcb-nonprod-mics
+SA_EMAIL=qa-idcard-app-sa@$PROJECT_ID.iam.gserviceaccount.com
+
+gcloud projects add-iam-policy-binding $PROJECT_ID 
+--member="serviceAccount:$SA_EMAIL" 
+--role="roles/storage.admin"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID 
+--member="serviceAccount:$SA_EMAIL" 
+--role="roles/run.invoker"
+
+gcloud projects add-iam-policy-binding $PROJECT_ID 
+--member="serviceAccount:$SA_EMAIL" 
+--role="roles/secretmanager.secretAccessor"
+{code}
+{expand}
+
+---
+
+## 🧾 Step 4 — Annotate Service Account (Workload Identity)
+
+{expand:title=Click to view details}
+This step links the GKE SA to the GCP IAM SA using **Workload Identity Federation**.
+
+{code:bash}
+kubectl annotate serviceaccount qa-idcard-app-sa 
+iam.gke.io/gcp-service-account=[qa-idcard-app-sa@hcb-nonprod-mics.iam.gserviceaccount.com](mailto:qa-idcard-app-sa@hcb-nonprod-mics.iam.gserviceaccount.com) 
+-n mics-nonprod-qa
+{code}
+
+✅ This allows pods in `mics-nonprod-qa` to securely impersonate the IAM SA without JSON keys.
+{expand}
+
+---
+
+## 🌐 Step 5 — Configure PingID Client
+
+{expand:title=Click to view steps}
+
+1. Log in to **PingID Admin Console** → *Applications → Add Application → OpenID Connect*
+
+2. Create a new client:
+
+   * **Client Name:** `MICS_QA`
+   * **Grant Type:** `authorization_code`
+   * **Scopes:** `openid profile email`
+   * **Environment:** `QA`
+
+3. Add **Redirect URIs:**
+
+   ```
+   https://mics-nonprod-qa.cvshealth.com/callback
+   https://mics-nonprod-qa.cvshealth.com/login/oauth2/code
+   ```
+
+4. Note down `Client ID` and `Client Secret`.
+
+5. Create secret in QA namespace:
+   {code:bash}
+   kubectl create secret generic pingid-qa-credentials 
+   --from-literal=CLIENT_ID=<client-id> 
+   --from-literal=CLIENT_SECRET=<client-secret> 
+   -n mics-nonprod-qa
+   {code}
+   {expand}
+
+---
+
+## 🌍 Step 6 — Create QA Hostname and Redirect URI
+
+{expand:title=Click to view details}
+**Hostname:**
+
+```
+mics-nonprod-qa.cvshealth.com
+```
+
+**Steps:**
+
+1. Create DNS record mapping hostname → Internal Ingress Gateway IP.
+2. Update Istio VirtualService YAML:
+   {code:yaml}
+   hosts:
+
+   * mics-nonprod-qa.cvshealth.com
+     gateways:
+   * istio-system/internal-ingressgateway
+     {code}
+3. Add redirect URI in PingID:
+
+   ```
+   https://mics-nonprod-qa.cvshealth.com/callback
+   ```
+
+{expand}
+
+---
+
+## 👥 Step 7 — Provide Access
+
+{expand:title=Click to view access table}
+
+| User/Group   | Role  | Namespace       | Notes                  |
+| ------------ | ----- | --------------- | ---------------------- |
+| QA Engineers | edit  | mics-nonprod-qa | Deploy & test services |
+| DevOps       | admin | argocd          | Manage deployments     |
+| Developers   | view  | mics-nonprod-qa | View logs/events       |
+
+**Command Example:**
+{code:bash}
+kubectl create rolebinding qa-edit-access 
+--clusterrole=edit 
+--user=[qa-team@cvshealth.com](mailto:qa-team@cvshealth.com) 
+--namespace=mics-nonprod-qa
+{code}
+{expand}
+
+---
+
+## 🚀 Step 8 — Deploy ArgoCD Application
+
+{expand:title=Click to view YAML}
+Apply the ArgoCD application definition to deploy into QA.
+
+{code:bash}
+kubectl apply -f application-qa.yaml -n argocd
+{code}
+
+**Example Snippet:**
+{code:yaml}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+name: mics-ui-components-app-qa
+namespace: argocd
+spec:
+project: default
+source:
+repoURL: '[https://github.com/cvshealth/mics-ui-components.git](https://github.com/cvshealth/mics-ui-components.git)'
+targetRevision: main
+path: manifests/qa
+destination:
+server: [https://kubernetes.default.svc](https://kubernetes.default.svc)
+namespace: mics-nonprod-qa
+syncPolicy:
+automated:
+prune: true
+selfHeal: true
+{code}
+{expand}
+
+---
+
+## 🔍 Step 9 — Validation Checklist
+
+{expand:title=Click to view checklist}
+
+| Task               | Command                                     | Expected Output            |
+| ------------------ | ------------------------------------------- | -------------------------- |
+| Namespace created  | `kubectl get ns`                            | `mics-nonprod-qa` present  |
+| SA exists          | `gcloud iam service-accounts list`          | `qa-idcard-app-sa` present |
+| Annotation applied | `kubectl get sa -n mics-nonprod-qa -o yaml` | Annotation visible         |
+| ArgoCD app synced  | `argocd app get mics-ui-components-app-qa`  | Synced, Healthy            |
+| Host resolves      | `nslookup mics-nonprod-qa.cvshealth.com`    | Ingress IP returned        |
+| PingID redirect    | Browser login test                          | Successful callback        |
+| {expand}           |                                             |                            |
+
+---
+
+## 📚 References
+
+* [GCP IAM Policy Binding Guide](https://cloud.google.com/iam/docs/granting-changing-revoking-access)
+* [PingID OIDC Setup Guide (Internal CVS)]()
+* [ArgoCD Declarative Setup](https://argo-cd.readthedocs.io/en/stable/operator-manual/declarative-setup/)
+* [Istio VirtualService Reference](https://istio.io/latest/docs/reference/config/networking/virtual-service/)
+
+---
+
+## ✅ Summary
+
+| Component         | Action Completed                            |
+| ----------------- | ------------------------------------------- |
+| Namespace         | Created `mics-nonprod-qa`                   |
+| Service Account   | Created `qa-idcard-app-sa` with IAM roles   |
+| Workload Identity | Annotated SA for GKE ↔ GCP integration      |
+| PingID            | Created `MICS_QA` client with redirect URIs |
+| Hostname          | Configured `mics-nonprod-qa.cvshealth.com`  |
+| ArgoCD            | Deployed QA application                     |
+| Verification      | All checks validated successfully           |
+
+---
+
+**🎯 Final Outcome:**
+QA environment for **HCB-NonProd-MICS (ID Card Excellence)** is successfully provisioned and integrated with PingID and ArgoCD.
+Application accessible via:
+👉 **[https://mics-nonprod-qa.cvshealth.com](https://mics-nonprod-qa.cvshealth.com)**
+
+---
+
+Would you like me to add a **Confluence cover page section** (with document owner, version history, reviewers, and approval table) — formatted in standard CVS template style for governance submission?
