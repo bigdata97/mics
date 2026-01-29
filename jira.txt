@@ -1,32 +1,87 @@
-name: Snyk Security Scan
+name: Terraform Common Steps
 
 on:
-  pull_request:
-    branches:
-      - main
-      - develop
-      - release/*
-      - hotfix/*
+  workflow_call:
+    inputs:
+      action:
+        required: true
+        type: string
 
 jobs:
-  snyk-scan:
-    name: Snyk Vulnerability Scan
-    runs-on: ubuntu-latest
-
-    permissions:
-      contents: read
-      security-events: write
+  terraform_common:
+    runs-on: self-hosted
+    container:
+      image: cvsh.jfrog.io/.../aetnahealth-build-tools:latest
+      credentials:
+        username: ${{ secrets.ARTIFACTORY_USERNAME }}
+        password: ${{ secrets.ARTIFACTORY_TOKEN }}
+    outputs:
+      tfplan_path: ${{ steps.upload.outputs.artifact_id }}
 
     steps:
-      - name: Checkout source code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Snyk security scan
-        uses: snyk/actions/node@v3
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          command: test
-          args: >
-            --severity-threshold=high
-            --all-projects
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SA }}
+          create_credentials_file: true
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Plan
+        if: ${{ inputs.action == 'plan' }}
+        run: terraform plan -out=tfplan
+
+      - name: Upload Plan
+        if: ${{ inputs.action == 'plan' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: tfplan
+
+
+
+
+
+name: Terraform CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Terraform Action"
+        type: choice
+        options:
+          - plan
+          - apply
+      deploy-environment:
+        description: "Select Environment"
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+
+jobs:
+  Terraform_Plan:
+    if: ${{ github.event.inputs.action == 'plan' }}
+    uses: ./.github/workflows/_terraform_common.yml
+    with:
+      action: 'plan'
+
+  Terraform_Apply:
+    needs: Terraform_Plan
+    if: ${{ github.event.inputs.action == 'apply' }}
+    uses: ./.github/workflows/_terraform_common.yml
+    with:
+      action: 'apply'
+    environment:
+      name: ${{ github.event.inputs.deploy-environment }} # 👈 gating happens here
+
+
+
+
