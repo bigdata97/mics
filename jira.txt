@@ -1,18 +1,109 @@
-jobs:
-  notify_apply_approval:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Post approval link to Teams
-        shell: bash
-        run: |
-          RUN_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-          MSG="🚦 *Approval needed* for Terraform APPLY\nEnvironment: *${{ github.event.inputs.deploy-environment }}*\nRun link: ${RUN_URL}\nOpen link → Review deployments → Approve/Deny."
-          curl -H "Content-Type: application/json" \
-               -d "{\"text\":\"${MSG}\"}" \
-               "${{ secrets.TEAMS_WEBHOOK_URL }}"
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "summary": "GitHub Actions Approval Required",
+  "themeColor": "0076D7",
+  "title": "🚦 Approval Required",
+  "text": "Terraform **apply** is waiting for approval.",
+  "potentialAction": [
+    {
+      "@type": "OpenUri",
+      "name": "View GitHub Run",
+      "targets": [
+        {
+          "os": "default",
+          "uri": "https://github.com/ORG/REPO/actions/runs/123456789"
+        }
+      ]
+    }
+  ]
+}
+
+
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d @card.json \
+  "<INCOMING_WEBHOOK_URL>"
+
+
+Example 2: Multiple Buttons (Approve / Reject / Logs)
+{
+  "@type": "MessageCard",
+  "@context": "http://schema.org/extensions",
+  "summary": "Terraform Apply Approval",
+  "themeColor": "FFA500",
+  "title": "⚠️ Terraform Apply Pending",
+  "text": "**Environment:** QA\n**Triggered by:** GitHub Actions",
+  "potentialAction": [
+    {
+      "@type": "OpenUri",
+      "name": "Approve",
+      "targets": [
+        {
+          "os": "default",
+          "uri": "https://github.com/ORG/REPO/actions/runs/123456789"
+        }
+      ]
+    },
+    {
+      "@type": "OpenUri",
+      "name": "Reject",
+      "targets": [
+        {
+          "os": "default",
+          "uri": "https://github.com/ORG/REPO/issues/new?title=Terraform+Rejected"
+        }
+      ]
+    },
+    {
+      "@type": "OpenUri",
+      "name": "View Logs",
+      "targets": [
+        {
+          "os": "default",
+          "uri": "https://github.com/ORG/REPO/actions"
+        }
+      ]
+    }
+  ]
+}
 
 
 
-MSG="🚦 Approval required: Terraform APPLY\n• Environment: ${{ github.event.inputs.deploy-environment }}\n• Run: ${RUN_URL}\n\nAction: Open run → Review deployments → Approve/Deny"
+Example 3: GitHub Actions – Inline YAML (No JSON file)
+- name: Notify Teams
+  run: |
+    curl -X POST \
+      -H "Content-Type: application/json" \
+      -d '{
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "summary": "Deployment Notification",
+        "themeColor": "2EB886",
+        "title": "✅ Terraform Apply Completed",
+        "text": "**Env:** DEV\n**Status:** Success",
+        "potentialAction": [
+          {
+            "@type": "OpenUri",
+            "name": "View Run",
+            "targets": [
+              {
+                "os": "default",
+                "uri": "'"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"'"
+              }
+            ]
+          }
+        ]
+      }' \
+      "${{ secrets.TEAMS_WEBHOOK_URL }}"
+
+| Purpose | Color    |
+| ------- | -------- |
+| Success | `2EB886` |
+| Warning | `FFA500` |
+| Error   | `FF0000` |
+| Info    | `0076D7` |
+
+
 
 
