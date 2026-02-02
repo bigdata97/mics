@@ -1,3 +1,61 @@
+
+- name: Notify Teams – Terraform Apply Approval
+  run: |
+    curl -X POST \
+      -H "Content-Type: application/json" \
+      -d '{
+        "@type": "MessageCard",
+        "@context": "http://schema.org/extensions",
+        "summary": "Terraform Apply – Approval Required",
+        "themeColor": "2F8D46",
+        "title": "⏳ Terraform Apply – Approval Required",
+        "sections": [
+          {
+            "activityTitle": "**ENV-Development**",
+            "activitySubtitle": "ACTION_TYPE: apply",
+            "activityText": "**MICS Terraform repo CICD – Plan & Apply**",
+            "facts": [
+              { "name": "Repository", "value": "'"$GITHUB_REPOSITORY"'" },
+              { "name": "Status", "value": "Waiting for review" },
+              { "name": "Run ID", "value": "'"$GITHUB_RUN_ID"'" }
+            ],
+            "markdown": true
+          }
+        ],
+        "potentialAction": [
+          {
+            "@type": "OpenUri",
+            "name": "🟢 Review pending deployments",
+            "targets": [
+              {
+                "os": "default",
+                "uri": "'"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"'"
+              }
+            ]
+          },
+          {
+            "@type": "OpenUri",
+            "name": "🔍 View Workflow Run",
+            "targets": [
+              {
+                "os": "default",
+                "uri": "'"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"'"
+              }
+            ]
+          }
+        ]
+      }' \
+      "${{ secrets.TEAMS_WEBHOOK_URL }}"
+
+
+
+
+
+
+
+
+
+
 {
   "@type": "MessageCard",
   "@context": "http://schema.org/extensions",
