@@ -1,3 +1,72 @@
+
+name: Branch and PR Metrics
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1' # Every Monday
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      # -------------------------------
+      # PR METRICS → GITHUB SUMMARY
+      # -------------------------------
+      - name: Run PR metrics
+        run: |
+          echo "## 📊 Pull Request Metrics" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          python scripts/pr_metrics.py | tee /tmp/pr_metrics.txt
+          cat /tmp/pr_metrics.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -------------------------------
+      # BRANCH METRICS → GITHUB SUMMARY
+      # -------------------------------
+      - name: Run Branch metrics
+        run: |
+          echo "## 🌿 Branch Metrics" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          python scripts/branch_metrics.py | tee /tmp/branch_metrics.txt
+          cat /tmp/branch_metrics.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -------------------------------
+      # OPTIONAL: Upload CSV reports
+      # -------------------------------
+      - name: Upload metrics reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-pr-metrics
+          path: reports/
+
+
+
+
+
+
+
+
 2️⃣ Python Script #1 — PR Metrics (ready to run)
 scripts/pr_metrics.py
 This script collects:
