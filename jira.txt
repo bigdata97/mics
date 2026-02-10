@@ -1,189 +1,263 @@
-- name: Publish Terraform Plan Summary
-      run: |
-        echo "## Terraform Plan Review Required" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Please review the Terraform plan before approving apply." >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "**Artifact:** terraform-plan" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Plan Preview (first 40 lines)" >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        head -n 40 terraform-plan.txt >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-
-
-- name: Notify Teams – Terraform Apply Approval
-  run: |
-    curl -X POST \
-  -H "Content-Type: application/json; charset=utf-8" \
-  -d '{
-    "@type": "MessageCard",
-    "@context": "http://schema.org/extensions",
-    "summary": "Terraform Apply - Approval Required",
-    "themeColor": "2F8D46",
-    "title": "Terraform Apply - Approval Required",
-    "sections": [
-      {
-        "activityTitle": "**ENV-Development**",
-        "activitySubtitle": "ACTION_TYPE: apply",
-        "activityText": "**MICS Terraform repo CICD - Plan & Apply**",
-        "facts": [
-          {
-            "name": "Repository",
-            "value": "https://github.com/cvs-health-source-code/mics-terraform-modules"
-          },
-          {
-            "name": "Status",
-            "value": "Waiting for review"
-          },
-          {
-            "name": "Run ID",
-            "value": "21597065966"
-          }
-        ],
-        "markdown": true
-      }
-    ],
-    "potentialAction": [
-      {
-        "@type": "OpenUri",
-        "name": "Review pending deployments",
-        "targets": [
-          {
-            "os": "default",
-            "uri": "https://github.com/cvs-health-source-code/mics-terraform-modules/actions/runs/21597065966"
-          }
-        ]
-      },
-      {
-        "@type": "OpenUri",
-        "name": "View Workflow Run",
-        "targets": [
-          {
-            "os": "default",
-            "uri": "https://github.com/cvs-health-source-code/mics-terraform-modules/actions/runs/21597065966"
-          }
-        ]
-      }
-    ]
-  }' \
-  "<INCOMING_WEBHOOK_URL>"
+2️⃣ Python Script #1 — PR Metrics (ready to run)
+scripts/pr_metrics.py
+This script collects:
+PR count
+Average merge time
+Average time to first review
+Conflict count (best-effort)
+Outputs CSV + console summary
 
 
 
+import requests
+import os
+import csv
+from datetime import datetime
 
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+REPO = os.environ["GITHUB_REPOSITORY"]  # org/repo
+API = "https://api.github.com"
 
-
-
-
-
-
-
-{
-  "@type": "MessageCard",
-  "@context": "http://schema.org/extensions",
-  "summary": "GitHub Actions Approval Required",
-  "themeColor": "0076D7",
-  "title": "🚦 Approval Required",
-  "text": "Terraform **apply** is waiting for approval.",
-  "potentialAction": [
-    {
-      "@type": "OpenUri",
-      "name": "View GitHub Run",
-      "targets": [
-        {
-          "os": "default",
-          "uri": "https://github.com/ORG/REPO/actions/runs/123456789"
-        }
-      ]
-    }
-  ]
+headers = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github+json"
 }
 
+def get_prs():
+    prs = []
+    page = 1
+    while True:
+        r = requests.get(
+            f"{API}/repos/{REPO}/pulls",
+            headers=headers,
+            params={"state": "closed", "per_page": 100, "page": page}
+        )
+        data = r.json()
+        if not data:
+            break
+        prs.extend(data)
+        page += 1
+    return prs
 
-curl -X POST \
-  -H "Content-Type: application/json" \
-  -d @card.json \
-  "<INCOMING_WEBHOOK_URL>"
+prs = get_prs()
+
+rows = []
+merge_times = []
+review_times = []
+conflicts = 0
+
+for pr in prs:
+    if not pr.get("merged_at"):
+        continue
+
+    created = datetime.fromisoformat(pr["created_at"].replace("Z", ""))
+    merged = datetime.fromisoformat(pr["merged_at"].replace("Z", ""))
+    merge_hours = (merged - created).total_seconds() / 3600
+    merge_times.append(merge_hours)
+
+    reviews = requests.get(
+        f'{API}/repos/{REPO}/pulls/{pr["number"]}/reviews',
+        headers=headers
+    ).json()
+
+    if reviews:
+        first_review = datetime.fromisoformat(reviews[0]["submitted_at"].replace("Z", ""))
+        review_hours = (first_review - created).total_seconds() / 3600
+        review_times.append(review_hours)
+
+    if pr.get("mergeable_state") == "dirty":
+        conflicts += 1
+
+    rows.append([
+        pr["number"],
+        pr["title"],
+        round(merge_hours, 2),
+        pr["user"]["login"]
+    ])
+
+os.makedirs("reports", exist_ok=True)
+
+with open("reports/pr_metrics.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["PR Number", "Title", "Merge Time (hrs)", "Author"])
+    writer.writerows(rows)
+
+print("PR METRICS SUMMARY")
+print("------------------")
+print(f"Total merged PRs: {len(rows)}")
+print(f"Average merge time (hrs): {round(sum(merge_times)/len(merge_times), 2)}")
+if review_times:
+    print(f"Average time to first review (hrs): {round(sum(review_times)/len(review_times), 2)}")
+print(f"PRs with conflicts: {conflicts}")
 
 
-Example 2: Multiple Buttons (Approve / Reject / Logs)
-{
-  "@type": "MessageCard",
-  "@context": "http://schema.org/extensions",
-  "summary": "Terraform Apply Approval",
-  "themeColor": "FFA500",
-  "title": "⚠️ Terraform Apply Pending",
-  "text": "**Environment:** QA\n**Triggered by:** GitHub Actions",
-  "potentialAction": [
-    {
-      "@type": "OpenUri",
-      "name": "Approve",
-      "targets": [
-        {
-          "os": "default",
-          "uri": "https://github.com/ORG/REPO/actions/runs/123456789"
-        }
-      ]
-    },
-    {
-      "@type": "OpenUri",
-      "name": "Reject",
-      "targets": [
-        {
-          "os": "default",
-          "uri": "https://github.com/ORG/REPO/issues/new?title=Terraform+Rejected"
-        }
-      ]
-    },
-    {
-      "@type": "OpenUri",
-      "name": "View Logs",
-      "targets": [
-        {
-          "os": "default",
-          "uri": "https://github.com/ORG/REPO/actions"
-        }
-      ]
-    }
-  ]
+
+
+
+
+
+3️⃣ Python Script #2 — Branch Metrics
+scripts/branch_metrics.py
+
+Tracks:
+Branch count
+Branch age
+Stale branches (>30 days)
+Outputs CSV + summary
+
+
+import requests
+import os
+import csv
+from datetime import datetime, timezone
+
+GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
+REPO = os.environ["GITHUB_REPOSITORY"]
+API = "https://api.github.com"
+
+headers = {
+    "Authorization": f"Bearer {GITHUB_TOKEN}",
+    "Accept": "application/vnd.github+json"
 }
 
+branches = requests.get(
+    f"{API}/repos/{REPO}/branches",
+    headers=headers
+).json()
+
+now = datetime.now(timezone.utc)
+rows = []
+stale = 0
+
+for b in branches:
+    commit = requests.get(
+        b["commit"]["url"],
+        headers=headers
+    ).json()
+
+    commit_date = datetime.fromisoformat(
+        commit["commit"]["committer"]["date"].replace("Z", "+00:00")
+    )
+
+    age_days = (now - commit_date).days
+    if age_days > 30:
+        stale += 1
+
+    rows.append([b["name"], age_days])
+
+os.makedirs("reports", exist_ok=True)
+
+with open("reports/branch_metrics.csv", "w", newline="") as f:
+    writer = csv.writer(f)
+    writer.writerow(["Branch Name", "Age (days since last commit)"])
+    writer.writerows(rows)
+
+print("BRANCH METRICS SUMMARY")
+print("----------------------")
+print(f"Total branches: {len(rows)}")
+print(f"Stale branches (>30 days): {stale}")
 
 
-Example 3: GitHub Actions – Inline YAML (No JSON file)
-- name: Notify Teams
-  run: |
-    curl -X POST \
-      -H "Content-Type: application/json" \
-      -d '{
-        "@type": "MessageCard",
-        "@context": "http://schema.org/extensions",
-        "summary": "Deployment Notification",
-        "themeColor": "2EB886",
-        "title": "✅ Terraform Apply Completed",
-        "text": "**Env:** DEV\n**Status:** Success",
-        "potentialAction": [
-          {
-            "@type": "OpenUri",
-            "name": "View Run",
-            "targets": [
-              {
-                "os": "default",
-                "uri": "'"$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"'"
-              }
-            ]
-          }
-        ]
-      }' \
-      "${{ secrets.TEAMS_WEBHOOK_URL }}"
 
-| Purpose | Color    |
-| ------- | -------- |
-| Success | `2EB886` |
-| Warning | `FFA500` |
-| Error   | `FF0000` |
-| Info    | `0076D7` |
+
+
+
+
+
+
+
+
+
+
+
+
+4️⃣ GitHub Actions Workflow (automation)
+.github/workflows/branch-pr-metrics.yml
+
+This:
+Runs weekly
+Can be run manually
+Uploads reports as artifacts (very demo-friendly)
+
+
+
+name: Branch and PR Metrics
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1' # Every Monday
+
+jobs:
+  metrics:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run PR metrics
+        run: python scripts/pr_metrics.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Branch metrics
+        run: python scripts/branch_metrics.py
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload metrics reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: branch-pr-metrics
+          path: reports/
+
+
+
+
+
+
+
+
+
+
+
+5️⃣ How to demo this to your team (talking points)
+
+You can literally say this 👇
+
+“We’ve automated branch and PR analytics using GitHub APIs.
+Every week we collect PR merge time, review delays, conflicts, and stale branches.
+This gives us data to validate whether our branching strategy is actually scaling.”
+
+Then show:
+
+✅ Workflow run
+
+✅ Artifact → CSV files
+
+✅ Console summary logs
+
+That directly hits acceptance criteria.
+
+6️⃣ Jira “Change Implemented” (copy-paste)
+
+Implemented automated branch and PR analytics using GitHub Actions and custom scripts to capture merge time, review latency, conflicts, and stale branches. Reports are generated weekly and can be used to drive data-backed improvements to branching strategy.
+
+
+
+
 
 
 
