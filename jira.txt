@@ -1,60 +1,208 @@
-import os
-import requests
-from datetime import datetime, timezone, timedelta
+Perfect 👍 Let’s verify everything using **gcloud CLI** step-by-step.
 
-GITHUB_TOKEN = os.environ["GITHUB_TOKEN"]
-REPO = os.environ["GITHUB_REPOSITORY"]
+You want to confirm:
 
-headers = {
-    "Authorization": f"Bearer {GITHUB_TOKEN}",
-    "Accept": "application/vnd.github+json"
-}
+1. ✅ What is the Pub/Sub service account?
+2. ✅ Does it have KMS permission?
+3. ✅ If not, add it (if you have permission)
 
-def fetch_all_branches():
-    branches = []
-    page = 1
+---
 
-    while True:
-        url = f"https://api.github.com/repos/{REPO}/branches"
-        params = {"per_page": 100, "page": page}
-        resp = requests.get(url, headers=headers, params=params)
-        resp.raise_for_status()
+# 🔹 STEP 1 — Get Your Project Number
 
-        data = resp.json()
-        if not data:
-            break
+Pub/Sub service account uses **project number**, not project ID.
 
-        branches.extend(data)
-        page += 1
+```bash
+gcloud projects describe hcb-nonprod-mics \
+  --format="value(projectNumber)"
+```
 
-    return branches
+Example output:
 
-branches = fetch_all_branches()
-total_branches = len(branches)
+```
+12536452211
+```
 
-stale_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-stale_count = 0
+---
 
-for b in branches:
-    commit_url = b["commit"]["url"]
-    commit_resp = requests.get(commit_url, headers=headers)
-    commit_resp.raise_for_status()
+# 🔹 STEP 2 — Construct Pub/Sub Service Account
 
-    commit_date = commit_resp.json()["commit"]["committer"]["date"]
-    commit_dt = datetime.fromisoformat(commit_date.replace("Z", "+00:00"))
+It will always be:
 
-    if commit_dt < stale_cutoff:
-        stale_count += 1
+```
+service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com
+```
 
-summary = f"""
-### 🌿 Branch Metrics
+So:
 
-| Metric | Count |
-|------|------|
-| Total branches | **{total_branches}** |
-| Stale branches (>30 days) | **{stale_count}** |
+```
+service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com
+```
 
-"""
+---
 
-with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-    f.write(summary)
+# 🔹 STEP 3 — Check If It Has KMS Permission
+
+Now check IAM policy of your **KMS key**.
+
+First identify:
+
+* Key ring name
+* Key name
+* Location
+
+You selected:
+
+```
+gk-hcb-nonprod-mics-us-east4
+```
+
+So run:
+
+```bash
+gcloud kms keys get-iam-policy gk-hcb-nonprod-mics-us-east4 \
+  --keyring=YOUR_KEYRING_NAME \
+  --location=us-east4 \
+  --project=hcb-nonprod-mics
+```
+
+Example:
+
+```bash
+gcloud kms keys get-iam-policy gk-hcb-nonprod-mics-us-east4 \
+  --keyring=kr-hcb-nonprod-mics \
+  --location=us-east4 \
+  --project=hcb-nonprod-mics
+```
+
+---
+
+## 🔍 What You Are Looking For
+
+In output, check for:
+
+```
+roles/cloudkms.cryptoKeyEncrypterDecrypter
+```
+
+And inside it:
+
+```
+service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com
+```
+
+---
+
+### ✅ If You See It
+
+You're good. KMS permission exists.
+
+---
+
+### ❌ If You Don't See It
+
+That is the reason for your error.
+
+---
+
+# 🔹 STEP 4 — Add Permission (If You Have Rights)
+
+If you have IAM permission on KMS, run:
+
+```bash
+gcloud kms keys add-iam-policy-binding gk-hcb-nonprod-mics-us-east4 \
+  --keyring=YOUR_KEYRING_NAME \
+  --location=us-east4 \
+  --member="serviceAccount:service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com" \
+  --role="roles/cloudkms.cryptoKeyEncrypterDecrypter" \
+  --project=hcb-nonprod-mics
+```
+
+---
+
+# 🔹 STEP 5 — Verify Again
+
+Run:
+
+```bash
+gcloud kms keys get-iam-policy gk-hcb-nonprod-mics-us-east4 \
+  --keyring=YOUR_KEYRING_NAME \
+  --location=us-east4 \
+  --project=hcb-nonprod-mics \
+  --format="table(bindings.role, bindings.members)"
+```
+
+You should now see:
+
+```
+roles/cloudkms.cryptoKeyEncrypterDecrypter
+serviceAccount:service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com
+```
+
+---
+
+# 🔥 BONUS — If You Don't Know Keyring Name
+
+List keyrings:
+
+```bash
+gcloud kms keyrings list \
+  --location=us-east4 \
+  --project=hcb-nonprod-mics
+```
+
+Then list keys:
+
+```bash
+gcloud kms keys list \
+  --keyring=KEYRING_NAME \
+  --location=us-east4 \
+  --project=hcb-nonprod-mics
+```
+
+---
+
+# 🚀 Enterprise Reality (Very Likely in Your Project)
+
+Since you're in `hcb-nonprod-mics`:
+
+* KMS keys are often controlled by Security team
+* You may not have permission to modify IAM
+* You might get permission denied while adding binding
+
+If so, send this to security team:
+
+```
+Please grant role:
+roles/cloudkms.cryptoKeyEncrypterDecrypter
+
+To:
+service-<project-number>@gcp-sa-pubsub.iam.gserviceaccount.com
+
+On KMS key:
+gk-hcb-nonprod-mics-us-east4
+Location: us-east4
+Project: hcb-nonprod-mics
+```
+
+---
+
+# 🧠 Why This Is Mandatory
+
+When Pub/Sub creates encrypted topic:
+
+```
+Pub/Sub → Calls KMS → Encrypt message
+```
+
+If KMS blocks → topic creation fails.
+
+---
+
+If you want, I can also:
+
+* Give Terraform code to verify IAM binding
+* Show how to test topic creation via CLI
+* Explain how this works internally in GCP security model
+
+Just tell me 👍
