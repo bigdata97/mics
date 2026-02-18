@@ -1,208 +1,392 @@
-Perfect 👍 Let’s verify everything using **gcloud CLI** step-by-step.
+Perfect 👍 This is a **baseline infra enabler story** for your **ID Card Excellence project**, and since you already did this for **GCS**, we will follow the same modular Terraform pattern.
 
-You want to confirm:
+We will design this properly for:
 
-1. ✅ What is the Pub/Sub service account?
-2. ✅ Does it have KMS permission?
-3. ✅ If not, add it (if you have permission)
+* ✅ GCS
+* ✅ Pub/Sub
+* ✅ Artifact Registry
+* ✅ Secret Manager
+* ✅ Vertex AI (API enable + baseline)
+* ✅ Dataform (API enable)
+* ✅ Dataplex (API enable)
 
----
+And it should:
 
-# 🔹 STEP 1 — Get Your Project Number
-
-Pub/Sub service account uses **project number**, not project ID.
-
-```bash
-gcloud projects describe hcb-nonprod-mics \
-  --format="value(projectNumber)"
-```
-
-Example output:
-
-```
-12536452211
-```
+* Work for **dev & qa**
+* Follow **env naming**
+* Support CI (plan/apply via GitHub Actions)
+* Be modular
+* Be reusable for future services
 
 ---
 
-# 🔹 STEP 2 — Construct Pub/Sub Service Account
+# 🎯 TARGET ARCHITECTURE
 
-It will always be:
-
-```
-service-PROJECT_NUMBER@gcp-sa-pubsub.iam.gserviceaccount.com
-```
-
-So:
+Your Terraform repo should look like this:
 
 ```
-service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com
-```
-
----
-
-# 🔹 STEP 3 — Check If It Has KMS Permission
-
-Now check IAM policy of your **KMS key**.
-
-First identify:
-
-* Key ring name
-* Key name
-* Location
-
-You selected:
-
-```
-gk-hcb-nonprod-mics-us-east4
-```
-
-So run:
-
-```bash
-gcloud kms keys get-iam-policy gk-hcb-nonprod-mics-us-east4 \
-  --keyring=YOUR_KEYRING_NAME \
-  --location=us-east4 \
-  --project=hcb-nonprod-mics
-```
-
-Example:
-
-```bash
-gcloud kms keys get-iam-policy gk-hcb-nonprod-mics-us-east4 \
-  --keyring=kr-hcb-nonprod-mics \
-  --location=us-east4 \
-  --project=hcb-nonprod-mics
+terraform-idcard-data-services/
+│
+├── modules/
+│   ├── gcs/
+│   ├── pubsub/
+│   ├── artifact_registry/
+│   ├── secret_manager/
+│   ├── vertex_ai/
+│   ├── dataform/
+│   ├── dataplex/
+│
+├── environments/
+│   ├── dev/
+│   │   ├── main.tf
+│   │   ├── terraform.tfvars
+│   │   ├── backend.tf
+│   │   └── providers.tf
+│   │
+│   └── qa/
+│       ├── main.tf
+│       ├── terraform.tfvars
+│       ├── backend.tf
+│       └── providers.tf
+│
+├── versions.tf
+├── variables.tf
+└── outputs.tf
 ```
 
 ---
 
-## 🔍 What You Are Looking For
+# 🧩 MODULE DESIGN (Production-Ready Structure)
 
-In output, check for:
+---
 
+# 1️⃣ GCS MODULE (Already done – reuse pattern)
+
+modules/gcs/main.tf
+
+```hcl
+resource "google_storage_bucket" "this" {
+  name     = var.bucket_name
+  location = var.location
+
+  uniform_bucket_level_access = true
+
+  labels = var.labels
+
+  lifecycle_rule {
+    condition {
+      age = var.retention_days
+    }
+    action {
+      type = "Delete"
+    }
+  }
+}
 ```
-roles/cloudkms.cryptoKeyEncrypterDecrypter
-```
 
-And inside it:
+variables.tf
 
-```
-service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com
+```hcl
+variable "bucket_name" {}
+variable "location" {}
+variable "labels" { type = map(string) }
+variable "retention_days" { type = number }
 ```
 
 ---
 
-### ✅ If You See It
+# 2️⃣ PUB/SUB MODULE
 
-You're good. KMS permission exists.
+modules/pubsub/main.tf
 
----
+```hcl
+resource "google_pubsub_topic" "topic" {
+  name   = var.topic_name
+  labels = var.labels
+}
 
-### ❌ If You Don't See It
+resource "google_pubsub_subscription" "subscription" {
+  name  = var.subscription_name
+  topic = google_pubsub_topic.topic.id
 
-That is the reason for your error.
+  message_retention_duration = var.retention_duration
+}
+```
 
----
+variables.tf
 
-# 🔹 STEP 4 — Add Permission (If You Have Rights)
-
-If you have IAM permission on KMS, run:
-
-```bash
-gcloud kms keys add-iam-policy-binding gk-hcb-nonprod-mics-us-east4 \
-  --keyring=YOUR_KEYRING_NAME \
-  --location=us-east4 \
-  --member="serviceAccount:service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com" \
-  --role="roles/cloudkms.cryptoKeyEncrypterDecrypter" \
-  --project=hcb-nonprod-mics
+```hcl
+variable "topic_name" {}
+variable "subscription_name" {}
+variable "retention_duration" {}
+variable "labels" { type = map(string) }
 ```
 
 ---
 
-# 🔹 STEP 5 — Verify Again
+# 3️⃣ ARTIFACT REGISTRY MODULE
 
-Run:
+modules/artifact_registry/main.tf
 
-```bash
-gcloud kms keys get-iam-policy gk-hcb-nonprod-mics-us-east4 \
-  --keyring=YOUR_KEYRING_NAME \
-  --location=us-east4 \
-  --project=hcb-nonprod-mics \
-  --format="table(bindings.role, bindings.members)"
+```hcl
+resource "google_artifact_registry_repository" "repo" {
+  location      = var.location
+  repository_id = var.repository_id
+  description   = var.description
+  format        = var.format
+  labels        = var.labels
+}
 ```
 
-You should now see:
+variables.tf
 
-```
-roles/cloudkms.cryptoKeyEncrypterDecrypter
-serviceAccount:service-12536452211@gcp-sa-pubsub.iam.gserviceaccount.com
-```
-
----
-
-# 🔥 BONUS — If You Don't Know Keyring Name
-
-List keyrings:
-
-```bash
-gcloud kms keyrings list \
-  --location=us-east4 \
-  --project=hcb-nonprod-mics
-```
-
-Then list keys:
-
-```bash
-gcloud kms keys list \
-  --keyring=KEYRING_NAME \
-  --location=us-east4 \
-  --project=hcb-nonprod-mics
+```hcl
+variable "location" {}
+variable "repository_id" {}
+variable "description" {}
+variable "format" { default = "DOCKER" }
+variable "labels" { type = map(string) }
 ```
 
 ---
 
-# 🚀 Enterprise Reality (Very Likely in Your Project)
+# 4️⃣ SECRET MANAGER MODULE
 
-Since you're in `hcb-nonprod-mics`:
+modules/secret_manager/main.tf
 
-* KMS keys are often controlled by Security team
-* You may not have permission to modify IAM
-* You might get permission denied while adding binding
+```hcl
+resource "google_secret_manager_secret" "secret" {
+  secret_id = var.secret_id
 
-If so, send this to security team:
+  replication {
+    automatic = true
+  }
 
+  labels = var.labels
+}
 ```
-Please grant role:
-roles/cloudkms.cryptoKeyEncrypterDecrypter
 
-To:
-service-<project-number>@gcp-sa-pubsub.iam.gserviceaccount.com
+variables.tf
 
-On KMS key:
-gk-hcb-nonprod-mics-us-east4
-Location: us-east4
-Project: hcb-nonprod-mics
+```hcl
+variable "secret_id" {}
+variable "labels" { type = map(string) }
+```
+
+👉 If you want IAM bindings:
+
+```hcl
+resource "google_secret_manager_secret_iam_binding" "binding" {
+  secret_id = google_secret_manager_secret.secret.id
+  role      = "roles/secretmanager.secretAccessor"
+  members   = var.members
+}
 ```
 
 ---
 
-# 🧠 Why This Is Mandatory
+# 5️⃣ VERTEX AI MODULE
 
-When Pub/Sub creates encrypted topic:
+Mostly API enablement + optional baseline bucket.
 
+```hcl
+resource "google_project_service" "vertex" {
+  service = "aiplatform.googleapis.com"
+}
 ```
-Pub/Sub → Calls KMS → Encrypt message
-```
 
-If KMS blocks → topic creation fails.
+Optional baseline SA:
+
+```hcl
+resource "google_service_account" "vertex_sa" {
+  account_id   = "vertex-sa"
+  display_name = "Vertex AI Service Account"
+}
+```
 
 ---
 
-If you want, I can also:
+# 6️⃣ DATAFORM MODULE
 
-* Give Terraform code to verify IAM binding
-* Show how to test topic creation via CLI
-* Explain how this works internally in GCP security model
+```hcl
+resource "google_project_service" "dataform" {
+  service = "dataform.googleapis.com"
+}
+```
 
-Just tell me 👍
+---
+
+# 7️⃣ DATAPLEX MODULE
+
+```hcl
+resource "google_project_service" "dataplex" {
+  service = "dataplex.googleapis.com"
+}
+```
+
+---
+
+# 🏗 ENVIRONMENT LEVEL (dev/main.tf)
+
+```hcl
+module "gcs" {
+  source = "../../modules/gcs"
+
+  bucket_name    = "idcard-${var.env}-data-bucket"
+  location       = var.region
+  retention_days = 30
+  labels         = local.common_labels
+}
+
+module "pubsub" {
+  source = "../../modules/pubsub"
+
+  topic_name         = "idcard-${var.env}-events"
+  subscription_name  = "idcard-${var.env}-events-sub"
+  retention_duration = "604800s"
+  labels             = local.common_labels
+}
+
+module "artifact_registry" {
+  source = "../../modules/artifact_registry"
+
+  location      = var.region
+  repository_id = "idcard-${var.env}-repo"
+  description   = "Docker repo for ID card services"
+  labels        = local.common_labels
+}
+
+module "vertex_ai" {
+  source = "../../modules/vertex_ai"
+}
+```
+
+---
+
+# 🏷 Common Labels
+
+```
+locals {
+  common_labels = {
+    project     = "id-card-excellence"
+    environment = var.env
+    owner       = "platform-team"
+  }
+}
+```
+
+---
+
+# 🔐 backend.tf (Remote State in GCS)
+
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "idcard-terraform-state"
+    prefix = "data-services/dev"
+  }
+}
+```
+
+---
+
+# 🚀 GitHub Actions Plan / Apply
+
+plan.yml
+
+```yaml
+- name: Terraform Init
+  run: terraform init
+
+- name: Terraform Plan
+  run: terraform plan -var-file=terraform.tfvars
+```
+
+apply.yml
+
+```yaml
+- name: Terraform Apply
+  run: terraform apply -auto-approve -var-file=terraform.tfvars
+```
+
+---
+
+# ✅ Acceptance Criteria Mapping
+
+| Story AC                                | How we satisfy                 |
+| --------------------------------------- | ------------------------------ |
+| Storage & PubSub created with retention | Lifecycle + retention_duration |
+| Artifact Registry + Secret Manager IAM  | IAM binding resource           |
+| APIs enabled                            | google_project_service         |
+| Plan/apply works in dev/qa              | env folder separation          |
+
+---
+
+# 🎯 What You Should Do Now (Step-by-Step)
+
+1. Copy your GCS module pattern
+2. Create remaining modules exactly like above
+3. Create dev and qa environment folders
+4. Add backend
+5. Run locally:
+
+```
+terraform init
+terraform plan -var-file=terraform.tfvars
+```
+
+6. Push and test via GitHub Actions
+
+---
+
+# 💡 Pro Tip (Enterprise Clean Design)
+
+Instead of enabling APIs in every module, create:
+
+```
+modules/project_services/
+```
+
+and enable all APIs centrally:
+
+```hcl
+resource "google_project_service" "services" {
+  for_each = toset(var.services)
+  service  = each.value
+}
+```
+
+Then pass:
+
+```hcl
+services = [
+  "aiplatform.googleapis.com",
+  "dataform.googleapis.com",
+  "dataplex.googleapis.com"
+]
+```
+
+This is cleaner architecture.
+
+---
+
+# 🏁 Final Outcome
+
+After this:
+
+✔ Terraform repo fully modular
+✔ Environment based
+✔ Supports CI
+✔ Enterprise naming
+✔ Matches ID Card Excellence architecture
+✔ Easily extendable
+
+---
+
+If you want, I can now:
+
+* 🔥 Give you the FULL ready-to-copy Terraform repo structure
+* 🔥 Or give you production-grade version with IAM best practices
+* 🔥 Or help you create the JIRA update content for this story
+
+Tell me which one you want next.
