@@ -1,83 +1,39 @@
 Perfect 👍
-You want to extend the module to support:
+We’ll implement **Secret Manager module** exactly like your other modules:
 
-* ✅ **type** (STANDARD / REMOTE / VIRTUAL)
-* ✅ **tags** (additional metadata beyond labels)
+✔ for_each pattern
+✔ map(object()) variable structure
+✔ User-managed replication
+✔ CMEK required
+✔ No IAM bindings
+✔ Only create secret (NO secret version)
 
-Good. We will update the module cleanly without breaking your pattern.
+This will fully comply with your org policy.
 
 ---
 
-# ⚠️ Important Clarification
-
-In Artifact Registry:
-
-* `format` → DOCKER / MAVEN / PYTHON etc.
-* `mode` → STANDARD / REMOTE / VIRTUAL
-
-Terraform uses:
+# 📁 modules/secretmanager/main.tf
 
 ```hcl
-mode = "STANDARD"
-```
+resource "google_secret_manager_secret" "this" {
+  for_each = var.secrets
 
-So your requested **type** will map to Terraform's `mode`.
+  project   = var.project_id
+  secret_id = each.key
 
-Also:
+  labels = each.value.labels
 
-GCP Artifact Registry does NOT have a native "tags" field.
-Only:
+  replication {
+    user_managed {
+      dynamic "replicas" {
+        for_each = each.value.replication_regions
+        content {
+          location = replicas.value
 
-```
-labels = map(string)
-```
-
-So we will:
-
-* Keep `labels`
-* Add `tags` (which we will merge into labels internally)
-
-Enterprise teams often do this.
-
----
-
-# ✅ UPDATED MODULE (Copy-Paste Ready)
-
----
-
-# ================================
-
-# 📁 modules/artifactregistry/main.tf
-
-# ================================
-
-```hcl
-resource "google_artifact_registry_repository" "this" {
-  for_each = var.repositories
-
-  repository_id = each.key
-  project       = var.project_id
-  location      = each.value.location
-  format        = each.value.format
-  mode          = each.value.type
-  description   = each.value.description
-
-  labels = merge(
-    each.value.labels,
-    each.value.tags
-  )
-
-  dynamic "cleanup_policies" {
-    for_each = each.value.cleanup.enabled ? [1] : []
-    content {
-      id     = each.value.cleanup.policy_id
-      action = each.value.cleanup.action
-
-      condition {
-        older_than            = each.value.cleanup.older_than
-        tag_state             = each.value.cleanup.tag_state
-        tag_prefixes          = each.value.cleanup.tag_prefixes
-        package_name_prefixes = each.value.cleanup.package_name_prefixes
+          customer_managed_encryption {
+            kms_key_name = each.value.kms_key_name
+          }
+        }
       }
     }
   }
@@ -86,11 +42,7 @@ resource "google_artifact_registry_repository" "this" {
 
 ---
 
-# ================================
-
-# 📁 modules/artifactregistry/variables.tf
-
-# ================================
+# 📁 modules/secretmanager/variables.tf
 
 ```hcl
 variable "project_id" {
@@ -98,190 +50,143 @@ variable "project_id" {
   description = "Project ID"
 }
 
-variable "repositories" {
+variable "secrets" {
   type = map(object({
-    location    = string
-    format      = string
-    type        = string   # STANDARD / REMOTE / VIRTUAL
-    description = string
-
-    labels      = map(string)
-    tags        = map(string)
-
-    cleanup = object({
-      enabled               = bool
-      policy_id             = string
-      action                = string
-      older_than            = string
-      tag_state             = string
-      tag_prefixes          = list(string)
-      package_name_prefixes = list(string)
-    })
+    replication_regions = list(string)
+    kms_key_name        = string
+    labels              = map(string)
   }))
 }
 ```
 
 ---
 
-# ================================
-
-# 📁 modules/artifactregistry/outputs.tf
-
-# ================================
+# 📁 modules/secretmanager/outputs.tf
 
 ```hcl
-output "repository_names" {
-  value = keys(google_artifact_registry_repository.this)
+output "secret_names" {
+  value = keys(google_secret_manager_secret.this)
 }
 ```
 
 ---
 
-# ================================
-
-# 📁 root/main.tf
-
-# ================================
+# 📁 root/main.tf (ADD MODULE)
 
 ```hcl
-module "artifactregistry" {
-  source = "./modules/artifactregistry"
+module "secretmanager" {
+  source = "./modules/secretmanager"
 
-  project_id   = var.project_id
-  repositories = var.artifact_repositories
+  project_id = var.project_id
+  secrets    = var.secrets
 }
 ```
 
 ---
 
-# ================================
-
-# 📁 root/variables.tf
-
-# ================================
+# 📁 root/variables.tf (ADD THIS VARIABLE)
 
 ```hcl
-variable "artifact_repositories" {
+variable "secrets" {
   type = map(object({
-    location    = string
-    format      = string
-    type        = string
-    description = string
-
-    labels      = map(string)
-    tags        = map(string)
-
-    cleanup = object({
-      enabled               = bool
-      policy_id             = string
-      action                = string
-      older_than            = string
-      tag_state             = string
-      tag_prefixes          = list(string)
-      package_name_prefixes = list(string)
-    })
+    replication_regions = list(string)
+    kms_key_name        = string
+    labels              = map(string)
   }))
 }
 ```
 
 ---
 
-# ================================
+# 📁 tfvars/mics-hcb-dev.tfvars (ADD SAMPLE SECRET)
 
-# 📁 tfvars/mics-hcb-dev.tfvars
-
-# ================================
+Use same KMS key you used for GCS / Artifact Registry (must be same region).
 
 ```hcl
-artifact_repositories = {
+secrets = {
 
-  "dev-mics-docker-repo" = {
-    location    = "us-east4"
-    format      = "DOCKER"
-    type        = "STANDARD"
-    description = "Docker repository for dev environment"
+  "dev-mics-db-password" = {
+    replication_regions = ["us-east4"]
+
+    kms_key_name = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
 
     labels = {
       environment = "dev"
       managed-by  = "terraform"
-    }
-
-    tags = {
-      team        = "id-card"
       application = "mics"
     }
-
-    cleanup = {
-      enabled               = true
-      policy_id             = "delete-old-images"
-      action                = "DELETE"
-      older_than            = "30d"
-      tag_state             = "ANY"
-      tag_prefixes          = []
-      package_name_prefixes = []
-    }
   }
+
 }
 ```
 
 ---
 
-# 🎯 What This Now Supports
+# 🚨 VERY IMPORTANT (CMEK Permission Requirement)
 
-You can now control:
+You MUST grant KMS access to Secret Manager service account.
 
-| Field   | Example                      |
-| ------- | ---------------------------- |
-| format  | DOCKER                       |
-| type    | STANDARD                     |
-| tags    | team = id-card               |
-| labels  | environment = dev            |
-| cleanup | Delete images older than 30d |
+Grant:
+
+```bash
+gcloud kms keys add-iam-policy-binding gk-hcb-nonprod-mics-us-east4 \
+  --keyring=gkr-nonprod-us-east4 \
+  --location=us-east4 \
+  --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-secretmanager.iam.gserviceaccount.com" \
+  --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
+```
+
+Replace `<PROJECT_NUMBER>` with:
+
+```bash
+gcloud projects describe hcb-nonprod-mics --format="value(projectNumber)"
+```
+
+If you skip this, Terraform will fail with KMS permission error.
 
 ---
 
-# 🚀 What Happens When You Plan
+# 🧠 What This Module Does
 
 Terraform will:
 
-* Create repository
-* Set format
-* Set mode (type)
-* Merge labels + tags
-* Configure cleanup policy
+✔ Create Secret
+✔ Use user-managed replication
+✔ Encrypt with CMEK
+✔ Add labels
+✔ NOT create any secret versions
+✔ NOT add IAM bindings
 
 ---
 
-# 🔥 Important Values For type
+# 🧪 After Apply
 
-Valid values:
+You will see in UI:
 
-```
-STANDARD
-REMOTE
-VIRTUAL
-```
-
-If you pass anything else → Terraform will fail.
+Secret Manager → Secret →
+Replication: User Managed
+Location: us-east4
+Encryption: Customer Managed (CMEK)
 
 ---
 
-# 🎯 You Now Have
+# 🎯 Enterprise Ready
 
-✔ Enterprise-level module
-✔ Supports mode (type)
-✔ Supports tags
-✔ Cleanup automation
-✔ Fully dynamic
-✔ Matches your GCS & PubSub pattern
+Now your baseline covers:
+
+✔ GCS (CMEK)
+✔ PubSub
+✔ Artifact Registry (CMEK)
+✔ Secret Manager (CMEK)
+
+You are building proper foundation infra.
 
 ---
 
-Next logical service in your story:
+Next from your story:
 
-* Secret Manager?
-* Vertex AI API enable module?
-* Dataform?
-* Dataplex?
+* Vertex AI APIs enable module?
+* Dataform baseline?
+* Dataplex baseline?
 
-Tell me which one we build next.
+Tell me which one we do next.
