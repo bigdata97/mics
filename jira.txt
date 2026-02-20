@@ -1,9 +1,293 @@
-curl -s -H "Authorization: Bearer $GITHUB_TOKEN" \
-     https://api.github.com/repos/$REPO/actions/artifacts \
-| jq -r '.artifacts[].id' \
-| while read artifact_id; do
-    echo "Deleting artifact $artifact_id"
-    curl -X DELETE \
-      -H "Authorization: Bearer $GITHUB_TOKEN" \
-      https://api.github.com/repos/$REPO/actions/artifacts/$artifact_id
-  done
+Perfect 👍
+You want **Option B (Enterprise-style module)**
+But:
+
+* ❌ No CMEK
+* ❌ No IAM bindings
+* ✅ Support multiple repos
+* ✅ Support cleanup policies
+* ✅ Follow your exact GCS module pattern
+* ✅ Use for_each + map(object())
+* ✅ Driven by tfvars
+
+Good. Let’s design this cleanly.
+
+---
+
+# 🎯 What This Module Will Support
+
+Using Terraform, we will support:
+
+* Multiple repositories
+* Different formats (DOCKER, MAVEN, PYTHON, etc.)
+* Labels
+* Description
+* Cleanup policies
+* Regional location
+* Environment naming via tfvars
+
+---
+
+# 📁 Folder Structure (Same Pattern As GCS & PubSub)
+
+```
+modules/
+  artifactregistry/
+    main.tf
+    variables.tf
+    outputs.tf
+```
+
+---
+
+# ================================
+
+# 📁 modules/artifactregistry/main.tf
+
+# ================================
+
+```hcl
+resource "google_artifact_registry_repository" "this" {
+  for_each = var.repositories
+
+  repository_id = each.key
+  project       = var.project_id
+  location      = each.value.location
+  format        = each.value.format
+  description   = each.value.description
+
+  labels = each.value.labels
+
+  dynamic "cleanup_policies" {
+    for_each = each.value.cleanup.enabled ? [1] : []
+    content {
+      id     = each.value.cleanup.policy_id
+      action = each.value.cleanup.action
+
+      condition {
+        older_than            = each.value.cleanup.older_than
+        tag_state             = each.value.cleanup.tag_state
+        tag_prefixes          = each.value.cleanup.tag_prefixes
+        package_name_prefixes = each.value.cleanup.package_name_prefixes
+      }
+    }
+  }
+}
+```
+
+---
+
+# ================================
+
+# 📁 modules/artifactregistry/variables.tf
+
+# ================================
+
+```hcl
+variable "project_id" {
+  type        = string
+  description = "Project ID"
+}
+
+variable "repositories" {
+  type = map(object({
+    location    = string
+    format      = string
+    description = string
+    labels      = map(string)
+
+    cleanup = object({
+      enabled               = bool
+      policy_id             = string
+      action                = string
+      older_than            = string
+      tag_state             = string
+      tag_prefixes          = list(string)
+      package_name_prefixes = list(string)
+    })
+  }))
+}
+```
+
+---
+
+# ================================
+
+# 📁 modules/artifactregistry/outputs.tf
+
+# ================================
+
+```hcl
+output "repository_names" {
+  value = keys(google_artifact_registry_repository.this)
+}
+```
+
+---
+
+# ================================
+
+# 📁 Root main.tf
+
+# ================================
+
+Add this block below your other modules:
+
+```hcl
+module "artifactregistry" {
+  source = "./modules/artifactregistry"
+
+  project_id   = var.project_id
+  repositories = var.artifact_repositories
+}
+```
+
+---
+
+# ================================
+
+# 📁 Root variables.tf
+
+# ================================
+
+Add:
+
+```hcl
+variable "artifact_repositories" {
+  type = map(object({
+    location    = string
+    format      = string
+    description = string
+    labels      = map(string)
+
+    cleanup = object({
+      enabled               = bool
+      policy_id             = string
+      action                = string
+      older_than            = string
+      tag_state             = string
+      tag_prefixes          = list(string)
+      package_name_prefixes = list(string)
+    })
+  }))
+}
+```
+
+---
+
+# ================================
+
+# 📁 tfvars/mics-hcb-dev.tfvars
+
+# ================================
+
+Add:
+
+```hcl
+artifact_repositories = {
+
+  "dev-mics-docker-repo" = {
+    location    = "us-east4"
+    format      = "DOCKER"
+    description = "Docker repository for dev environment"
+
+    labels = {
+      environment = "dev"
+      managed-by  = "terraform"
+    }
+
+    cleanup = {
+      enabled               = true
+      policy_id             = "delete-old-images"
+      action                = "DELETE"
+      older_than            = "30d"
+      tag_state             = "ANY"
+      tag_prefixes          = []
+      package_name_prefixes = []
+    }
+  }
+}
+```
+
+---
+
+# 🎯 What This Creates
+
+When you run:
+
+```bash
+terraform plan -var-file=tfvars/mics-hcb-dev.tfvars
+```
+
+It will create:
+
+Repository:
+
+```
+dev-mics-docker-repo
+```
+
+With:
+
+* Format: DOCKER
+* Region: us-east4
+* Cleanup policy: delete images older than 30 days
+* Labels applied
+
+---
+
+# 🔥 What You Can Customize
+
+In tfvars, you can change:
+
+| Field                 | Example                 |
+| --------------------- | ----------------------- |
+| format                | DOCKER / MAVEN / PYTHON |
+| cleanup older_than    | 7d / 14d / 30d          |
+| tag_state             | ANY / TAGGED / UNTAGGED |
+| tag_prefixes          | ["release"]             |
+| package_name_prefixes | ["app"]                 |
+
+---
+
+# 🚀 Enterprise Best Practice You’re Now Using
+
+✔ Modular
+✔ Environment driven
+✔ Dynamic for_each
+✔ Cleanup automated
+✔ No hardcoding
+✔ Matches your GCS & PubSub style
+
+---
+
+# ⚠️ Role Reminder
+
+Infra SA must have:
+
+```
+roles/artifactregistry.admin
+```
+
+You already have that ✅
+
+---
+
+# 🎯 Next Logical Step
+
+Now that you have:
+
+* GCS module ✅
+* PubSub module ✅
+* Artifact Registry module ✅
+
+Next in your story:
+
+```
+secretmanager
+vertex-ai (API enable)
+dataform
+dataplex
+```
+
+Which one do you want next?
