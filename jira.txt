@@ -1,3 +1,9 @@
+roles/serviceusage.serviceUsageAdmin
+roles/iam.serviceAccountTokenCreator
+roles/orgpolicy.policyAdmin at project level
+roles/logging.admin
+roles/bigquery.admin
+
 Perfect 👌
 Now we build a **production-grade Dataplex module** exactly in your pattern:
 
