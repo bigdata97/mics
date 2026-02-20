@@ -1,57 +1,23 @@
-Perfect 👌 this is a **very realistic enterprise setup**.
+Perfect 👌
+Now we build a **production-grade Dataplex module** exactly in your pattern:
 
-You want:
-
-* Region: **us-east4**
-* CMEK: **Required**
-* No Git remote
-* Create **Dataform repository**
-* Create **Workspace**
-* Terraform only (infra layer)
-
-Let’s do this properly.
-
----
-
-# 🔷 1️⃣ What We Will Create in Terraform
-
-Dataform resources supported by Terraform:
-
-### 1️⃣ `google_dataform_repository`
-
-Creates the Dataform repository.
-
-### 2️⃣ `google_dataform_repository_workspace`
-
-Creates a workspace inside repository.
+✔ for_each
+✔ map(object())
+✔ CMEK required
+✔ Single RAW zone
+✔ GCS bucket asset
+✔ Labels everywhere
+✔ No IAM bindings
+✔ Bucket already exists
+✔ Region = us-east4
 
 ---
 
-# 🔷 2️⃣ Important CMEK Requirement
-
-Since your org enforces CMEK:
-
-We must attach:
-
-```hcl
-kms_key_name = "projects/.../cryptoKeys/..."
-```
-
-AND grant KMS permission to:
-
-```
-service-${PROJECT_NUMBER}@gcp-sa-dataform.iam.gserviceaccount.com
-```
-
-Otherwise Terraform will fail.
-
----
-
-# 🔷 3️⃣ Final File Structure (Same Pattern as Yours)
+# 📁 Final Structure
 
 ```
 modules/
-  dataform/
+  dataplex/
     main.tf
     variables.tf
     outputs.tf
@@ -66,62 +32,130 @@ tfvars/
 
 ---
 
-# 📁 modules/dataform/main.tf
+# 📁 modules/dataplex/main.tf
 
-```hcl id="df_main_tf"
-resource "google_dataform_repository" "this" {
-  for_each = var.repositories
-
-  project        = var.project_id
-  region         = each.value.region
-  name           = each.key
-  display_name   = each.value.display_name
-  kms_key_name   = each.value.kms_key_name
-}
-
-resource "google_dataform_repository_workspace" "this" {
-  for_each = var.repositories
+```hcl
+resource "google_dataplex_lake" "this" {
+  for_each = var.lakes
 
   project      = var.project_id
-  region       = each.value.region
-  repository   = google_dataform_repository.this[each.key].name
-  name         = each.value.workspace_name
+  location     = each.value.region
+  lake_id      = each.key
+  display_name = each.value.display_name
+  description  = each.value.description
+
+  labels = each.value.labels
+
+  customer_managed_encryption {
+    kms_key_name = each.value.kms_key_name
+  }
+}
+
+
+resource "google_dataplex_zone" "this" {
+  for_each = var.lakes
+
+  project      = var.project_id
+  location     = each.value.region
+  lake         = google_dataplex_lake.this[each.key].lake_id
+  zone_id      = each.value.zone.zone_id
+  display_name = each.value.zone.display_name
+  description  = each.value.zone.description
+  type         = each.value.zone.type
+
+  labels = each.value.zone.labels
+
+  resource_spec {
+    location_type = "SINGLE_REGION"
+  }
+
+  customer_managed_encryption {
+    kms_key_name = each.value.kms_key_name
+  }
+}
+
+
+resource "google_dataplex_asset" "this" {
+  for_each = var.lakes
+
+  project      = var.project_id
+  location     = each.value.region
+  lake         = google_dataplex_lake.this[each.key].lake_id
+  zone         = google_dataplex_zone.this[each.key].zone_id
+  asset_id     = each.value.asset.asset_id
+  display_name = each.value.asset.display_name
+  description  = each.value.asset.description
+
+  labels = each.value.asset.labels
+
+  resource_spec {
+    name = "projects/${var.project_id}/buckets/${each.value.asset.bucket_name}"
+    type = "STORAGE_BUCKET"
+  }
+
+  discovery_spec {
+    enabled = true
+  }
 }
 ```
 
 ---
 
-# 📁 modules/dataform/variables.tf
+# 📁 modules/dataplex/variables.tf
 
-```hcl id="df_variables_tf"
+```hcl
 variable "project_id" {
   type        = string
   description = "Project ID"
 }
 
-variable "repositories" {
+variable "lakes" {
   type = map(object({
-    region          = string
-    display_name    = string
-    kms_key_name    = string
-    workspace_name  = string
+    region        = string
+    display_name  = string
+    description   = string
+    kms_key_name  = string
+    labels        = map(string)
+
+    zone = object({
+      zone_id      = string
+      display_name = string
+      description  = string
+      type         = string
+      labels       = map(string)
+    })
+
+    asset = object({
+      asset_id     = string
+      display_name = string
+      description  = string
+      bucket_name  = string
+      labels       = map(string)
+    })
   }))
 }
 ```
 
 ---
 
-# 📁 modules/dataform/outputs.tf
+# 📁 modules/dataplex/outputs.tf
 
-```hcl id="df_outputs_tf"
-output "repository_names" {
-  value = keys(google_dataform_repository.this)
+```hcl
+output "lake_names" {
+  value = keys(google_dataplex_lake.this)
 }
 
-output "workspace_names" {
+output "zone_names" {
   value = [
-    for k, v in google_dataform_repository_workspace.this :
-    v.name
+    for k, v in google_dataplex_zone.this :
+    v.zone_id
+  ]
+}
+
+output "asset_names" {
+  value = [
+    for k, v in google_dataplex_asset.this :
+    v.asset_id
   ]
 }
 ```
@@ -130,12 +164,12 @@ output "workspace_names" {
 
 # 📁 root/main.tf (ADD MODULE)
 
-```hcl id="df_root_main"
-module "dataform" {
-  source = "./modules/dataform"
+```hcl
+module "dataplex" {
+  source = "./modules/dataplex"
 
-  project_id   = var.project_id
-  repositories = var.dataform_repositories
+  project_id = var.project_id
+  lakes      = var.dataplex_lakes
 }
 ```
 
@@ -143,13 +177,30 @@ module "dataform" {
 
 # 📁 root/variables.tf (ADD VARIABLE)
 
-```hcl id="df_root_variables"
-variable "dataform_repositories" {
+```hcl
+variable "dataplex_lakes" {
   type = map(object({
-    region          = string
-    display_name    = string
-    kms_key_name    = string
-    workspace_name  = string
+    region        = string
+    display_name  = string
+    description   = string
+    kms_key_name  = string
+    labels        = map(string)
+
+    zone = object({
+      zone_id      = string
+      display_name = string
+      description  = string
+      type         = string
+      labels       = map(string)
+    })
+
+    asset = object({
+      asset_id     = string
+      display_name = string
+      description  = string
+      bucket_name  = string
+      labels       = map(string)
+    })
   }))
 }
 ```
@@ -160,16 +211,45 @@ variable "dataform_repositories" {
 
 Use SAME KMS key as your other services.
 
-```hcl id="df_tfvars"
-dataform_repositories = {
+```hcl
+dataplex_lakes = {
 
-  "dev-mics-dataform-repo" = {
-    region         = "us-east4"
-    display_name   = "Dev MICS Dataform Repository"
+  "dev-mics-lake" = {
+    region       = "us-east4"
+    display_name = "Dev MICS Lake"
+    description  = "Dataplex lake for dev environment"
 
-    kms_key_name   = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
+    kms_key_name = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
 
-    workspace_name = "dev-workspace"
+    labels = {
+      environment = "dev"
+      managed-by  = "terraform"
+      application = "mics"
+    }
+
+    zone = {
+      zone_id      = "dev-raw-zone"
+      display_name = "Dev Raw Zone"
+      description  = "Raw ingestion zone"
+      type         = "RAW"
+
+      labels = {
+        environment = "dev"
+        managed-by  = "terraform"
+      }
+    }
+
+    asset = {
+      asset_id     = "dev-mics-gcs-asset"
+      display_name = "Dev MICS GCS Asset"
+      description  = "GCS bucket governed by Dataplex"
+      bucket_name  = "dev-mics-ingestion-bucket"
+
+      labels = {
+        environment = "dev"
+        managed-by  = "terraform"
+      }
+    }
   }
 
 }
@@ -177,9 +257,9 @@ dataform_repositories = {
 
 ---
 
-# 🔴 VERY IMPORTANT — Grant CMEK Permission
+# 🚨 VERY IMPORTANT — CMEK Permission
 
-Run this ONCE:
+Grant this ONCE:
 
 ```bash
 PROJECT_NUMBER=$(gcloud projects describe hcb-nonprod-mics --format="value(projectNumber)")
@@ -187,56 +267,54 @@ PROJECT_NUMBER=$(gcloud projects describe hcb-nonprod-mics --format="value(proje
 gcloud kms keys add-iam-policy-binding gk-hcb-nonprod-mics-us-east4 \
   --keyring=gkr-nonprod-us-east4 \
   --location=us-east4 \
-  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-dataform.iam.gserviceaccount.com" \
+  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-dataplex.iam.gserviceaccount.com" \
   --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
 ```
 
-If you skip this → Terraform will fail.
+---
+
+# 🔷 Required IAM For Infra SA
+
+Infra SA must have:
+
+```
+roles/dataplex.admin
+```
+
+Without it → Terraform 403 error.
 
 ---
 
-# 🔷 What Terraform Will Now Do
+# 🔷 What Terraform Will Create
 
-✔ Create Dataform repository
-✔ Encrypt with CMEK
-✔ Create workspace
-✔ No Git integration
-✔ No IAM bindings
-✔ Fully org-policy compliant
+✔ Lake (CMEK encrypted)
+✔ RAW Zone
+✔ GCS Asset attached
+✔ Discovery enabled
+✔ Labels everywhere
 
----
-
-# 🔷 After Terraform Apply
-
-In UI:
-
-Console → Dataform
-You will see:
-
-* dev-mics-dataform-repo
-* Workspace: dev-workspace
-
-Ready for SQL development.
+Fully enterprise compliant.
 
 ---
 
-# 🔥 You Now Have
+# 🎯 Now Your Infra Baseline Includes
 
 ✔ GCS
 ✔ PubSub
 ✔ Artifact Registry (CMEK)
 ✔ Secret Manager (CMEK)
 ✔ Dataform (CMEK)
+✔ Dataplex (CMEK)
 
-Your infra baseline is becoming enterprise grade.
+You’ve basically built a full enterprise data platform foundation.
 
 ---
 
-Next in story:
+Next logical step from your story:
 
-* Dataplex?
-* Vertex AI?
-* Enable APIs module?
-* Service Accounts module?
+* Vertex AI API enable?
+* API enablement module?
+* Service account module?
+* IAM module?
 
-Tell me what we implement next.
+Tell me what we tackle next.
