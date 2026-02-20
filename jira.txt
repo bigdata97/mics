@@ -1,71 +1,128 @@
-Perfect 👍
-We’ll implement **Secret Manager module** exactly like your other modules:
+Perfect 👌 this is a **very realistic enterprise setup**.
 
-✔ for_each pattern
-✔ map(object()) variable structure
-✔ User-managed replication
-✔ CMEK required
-✔ No IAM bindings
-✔ Only create secret (NO secret version)
+You want:
 
-This will fully comply with your org policy.
+* Region: **us-east4**
+* CMEK: **Required**
+* No Git remote
+* Create **Dataform repository**
+* Create **Workspace**
+* Terraform only (infra layer)
+
+Let’s do this properly.
 
 ---
 
-# 📁 modules/secretmanager/main.tf
+# 🔷 1️⃣ What We Will Create in Terraform
+
+Dataform resources supported by Terraform:
+
+### 1️⃣ `google_dataform_repository`
+
+Creates the Dataform repository.
+
+### 2️⃣ `google_dataform_repository_workspace`
+
+Creates a workspace inside repository.
+
+---
+
+# 🔷 2️⃣ Important CMEK Requirement
+
+Since your org enforces CMEK:
+
+We must attach:
 
 ```hcl
-resource "google_secret_manager_secret" "this" {
-  for_each = var.secrets
+kms_key_name = "projects/.../cryptoKeys/..."
+```
 
-  project   = var.project_id
-  secret_id = each.key
+AND grant KMS permission to:
 
-  labels = each.value.labels
+```
+service-${PROJECT_NUMBER}@gcp-sa-dataform.iam.gserviceaccount.com
+```
 
-  replication {
-    user_managed {
-      dynamic "replicas" {
-        for_each = each.value.replication_regions
-        content {
-          location = replicas.value
+Otherwise Terraform will fail.
 
-          customer_managed_encryption {
-            kms_key_name = each.value.kms_key_name
-          }
-        }
-      }
-    }
-  }
+---
+
+# 🔷 3️⃣ Final File Structure (Same Pattern as Yours)
+
+```
+modules/
+  dataform/
+    main.tf
+    variables.tf
+    outputs.tf
+
+root/
+  main.tf
+  variables.tf
+
+tfvars/
+  mics-hcb-dev.tfvars
+```
+
+---
+
+# 📁 modules/dataform/main.tf
+
+```hcl id="df_main_tf"
+resource "google_dataform_repository" "this" {
+  for_each = var.repositories
+
+  project        = var.project_id
+  region         = each.value.region
+  name           = each.key
+  display_name   = each.value.display_name
+  kms_key_name   = each.value.kms_key_name
+}
+
+resource "google_dataform_repository_workspace" "this" {
+  for_each = var.repositories
+
+  project      = var.project_id
+  region       = each.value.region
+  repository   = google_dataform_repository.this[each.key].name
+  name         = each.value.workspace_name
 }
 ```
 
 ---
 
-# 📁 modules/secretmanager/variables.tf
+# 📁 modules/dataform/variables.tf
 
-```hcl
+```hcl id="df_variables_tf"
 variable "project_id" {
   type        = string
   description = "Project ID"
 }
 
-variable "secrets" {
+variable "repositories" {
   type = map(object({
-    replication_regions = list(string)
-    kms_key_name        = string
-    labels              = map(string)
+    region          = string
+    display_name    = string
+    kms_key_name    = string
+    workspace_name  = string
   }))
 }
 ```
 
 ---
 
-# 📁 modules/secretmanager/outputs.tf
+# 📁 modules/dataform/outputs.tf
 
-```hcl
-output "secret_names" {
-  value = keys(google_secret_manager_secret.this)
+```hcl id="df_outputs_tf"
+output "repository_names" {
+  value = keys(google_dataform_repository.this)
+}
+
+output "workspace_names" {
+  value = [
+    for k, v in google_dataform_repository_workspace.this :
+    v.name
+  ]
 }
 ```
 
@@ -73,48 +130,46 @@ output "secret_names" {
 
 # 📁 root/main.tf (ADD MODULE)
 
-```hcl
-module "secretmanager" {
-  source = "./modules/secretmanager"
+```hcl id="df_root_main"
+module "dataform" {
+  source = "./modules/dataform"
 
-  project_id = var.project_id
-  secrets    = var.secrets
+  project_id   = var.project_id
+  repositories = var.dataform_repositories
 }
 ```
 
 ---
 
-# 📁 root/variables.tf (ADD THIS VARIABLE)
+# 📁 root/variables.tf (ADD VARIABLE)
 
-```hcl
-variable "secrets" {
+```hcl id="df_root_variables"
+variable "dataform_repositories" {
   type = map(object({
-    replication_regions = list(string)
-    kms_key_name        = string
-    labels              = map(string)
+    region          = string
+    display_name    = string
+    kms_key_name    = string
+    workspace_name  = string
   }))
 }
 ```
 
 ---
 
-# 📁 tfvars/mics-hcb-dev.tfvars (ADD SAMPLE SECRET)
+# 📁 tfvars/mics-hcb-dev.tfvars
 
-Use same KMS key you used for GCS / Artifact Registry (must be same region).
+Use SAME KMS key as your other services.
 
-```hcl
-secrets = {
+```hcl id="df_tfvars"
+dataform_repositories = {
 
-  "dev-mics-db-password" = {
-    replication_regions = ["us-east4"]
+  "dev-mics-dataform-repo" = {
+    region         = "us-east4"
+    display_name   = "Dev MICS Dataform Repository"
 
-    kms_key_name = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
+    kms_key_name   = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
 
-    labels = {
-      environment = "dev"
-      managed-by  = "terraform"
-      application = "mics"
-    }
+    workspace_name = "dev-workspace"
   }
 
 }
@@ -122,71 +177,66 @@ secrets = {
 
 ---
 
-# 🚨 VERY IMPORTANT (CMEK Permission Requirement)
+# 🔴 VERY IMPORTANT — Grant CMEK Permission
 
-You MUST grant KMS access to Secret Manager service account.
-
-Grant:
+Run this ONCE:
 
 ```bash
+PROJECT_NUMBER=$(gcloud projects describe hcb-nonprod-mics --format="value(projectNumber)")
+
 gcloud kms keys add-iam-policy-binding gk-hcb-nonprod-mics-us-east4 \
   --keyring=gkr-nonprod-us-east4 \
   --location=us-east4 \
-  --member="serviceAccount:service-<PROJECT_NUMBER>@gcp-sa-secretmanager.iam.gserviceaccount.com" \
+  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-dataform.iam.gserviceaccount.com" \
   --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
 ```
 
-Replace `<PROJECT_NUMBER>` with:
-
-```bash
-gcloud projects describe hcb-nonprod-mics --format="value(projectNumber)"
-```
-
-If you skip this, Terraform will fail with KMS permission error.
+If you skip this → Terraform will fail.
 
 ---
 
-# 🧠 What This Module Does
+# 🔷 What Terraform Will Now Do
 
-Terraform will:
-
-✔ Create Secret
-✔ Use user-managed replication
+✔ Create Dataform repository
 ✔ Encrypt with CMEK
-✔ Add labels
-✔ NOT create any secret versions
-✔ NOT add IAM bindings
+✔ Create workspace
+✔ No Git integration
+✔ No IAM bindings
+✔ Fully org-policy compliant
 
 ---
 
-# 🧪 After Apply
+# 🔷 After Terraform Apply
 
-You will see in UI:
+In UI:
 
-Secret Manager → Secret →
-Replication: User Managed
-Location: us-east4
-Encryption: Customer Managed (CMEK)
+Console → Dataform
+You will see:
+
+* dev-mics-dataform-repo
+* Workspace: dev-workspace
+
+Ready for SQL development.
 
 ---
 
-# 🎯 Enterprise Ready
+# 🔥 You Now Have
 
-Now your baseline covers:
-
-✔ GCS (CMEK)
+✔ GCS
 ✔ PubSub
 ✔ Artifact Registry (CMEK)
 ✔ Secret Manager (CMEK)
+✔ Dataform (CMEK)
 
-You are building proper foundation infra.
+Your infra baseline is becoming enterprise grade.
 
 ---
 
-Next from your story:
+Next in story:
 
-* Vertex AI APIs enable module?
-* Dataform baseline?
-* Dataplex baseline?
+* Dataplex?
+* Vertex AI?
+* Enable APIs module?
+* Service Accounts module?
 
-Tell me which one we do next.
+Tell me what we implement next.
