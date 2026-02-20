@@ -1,42 +1,47 @@
 Perfect 👍
-You want **Option B (Enterprise-style module)**
-But:
+You want to extend the module to support:
 
-* ❌ No CMEK
-* ❌ No IAM bindings
-* ✅ Support multiple repos
-* ✅ Support cleanup policies
-* ✅ Follow your exact GCS module pattern
-* ✅ Use for_each + map(object())
-* ✅ Driven by tfvars
+* ✅ **type** (STANDARD / REMOTE / VIRTUAL)
+* ✅ **tags** (additional metadata beyond labels)
 
-Good. Let’s design this cleanly.
+Good. We will update the module cleanly without breaking your pattern.
 
 ---
 
-# 🎯 What This Module Will Support
+# ⚠️ Important Clarification
 
-Using Terraform, we will support:
+In Artifact Registry:
 
-* Multiple repositories
-* Different formats (DOCKER, MAVEN, PYTHON, etc.)
-* Labels
-* Description
-* Cleanup policies
-* Regional location
-* Environment naming via tfvars
+* `format` → DOCKER / MAVEN / PYTHON etc.
+* `mode` → STANDARD / REMOTE / VIRTUAL
+
+Terraform uses:
+
+```hcl
+mode = "STANDARD"
+```
+
+So your requested **type** will map to Terraform's `mode`.
+
+Also:
+
+GCP Artifact Registry does NOT have a native "tags" field.
+Only:
+
+```
+labels = map(string)
+```
+
+So we will:
+
+* Keep `labels`
+* Add `tags` (which we will merge into labels internally)
+
+Enterprise teams often do this.
 
 ---
 
-# 📁 Folder Structure (Same Pattern As GCS & PubSub)
-
-```
-modules/
-  artifactregistry/
-    main.tf
-    variables.tf
-    outputs.tf
-```
+# ✅ UPDATED MODULE (Copy-Paste Ready)
 
 ---
 
@@ -54,9 +59,13 @@ resource "google_artifact_registry_repository" "this" {
   project       = var.project_id
   location      = each.value.location
   format        = each.value.format
+  mode          = each.value.type
   description   = each.value.description
 
-  labels = each.value.labels
+  labels = merge(
+    each.value.labels,
+    each.value.tags
+  )
 
   dynamic "cleanup_policies" {
     for_each = each.value.cleanup.enabled ? [1] : []
@@ -93,8 +102,11 @@ variable "repositories" {
   type = map(object({
     location    = string
     format      = string
+    type        = string   # STANDARD / REMOTE / VIRTUAL
     description = string
+
     labels      = map(string)
+    tags        = map(string)
 
     cleanup = object({
       enabled               = bool
@@ -127,11 +139,9 @@ output "repository_names" {
 
 # ================================
 
-# 📁 Root main.tf
+# 📁 root/main.tf
 
 # ================================
-
-Add this block below your other modules:
 
 ```hcl
 module "artifactregistry" {
@@ -146,19 +156,20 @@ module "artifactregistry" {
 
 # ================================
 
-# 📁 Root variables.tf
+# 📁 root/variables.tf
 
 # ================================
-
-Add:
 
 ```hcl
 variable "artifact_repositories" {
   type = map(object({
     location    = string
     format      = string
+    type        = string
     description = string
+
     labels      = map(string)
+    tags        = map(string)
 
     cleanup = object({
       enabled               = bool
@@ -181,19 +192,23 @@ variable "artifact_repositories" {
 
 # ================================
 
-Add:
-
 ```hcl
 artifact_repositories = {
 
   "dev-mics-docker-repo" = {
     location    = "us-east4"
     format      = "DOCKER"
+    type        = "STANDARD"
     description = "Docker repository for dev environment"
 
     labels = {
       environment = "dev"
       managed-by  = "terraform"
+    }
+
+    tags = {
+      team        = "id-card"
+      application = "mics"
     }
 
     cleanup = {
@@ -211,83 +226,62 @@ artifact_repositories = {
 
 ---
 
-# 🎯 What This Creates
+# 🎯 What This Now Supports
 
-When you run:
+You can now control:
 
-```bash
-terraform plan -var-file=tfvars/mics-hcb-dev.tfvars
-```
-
-It will create:
-
-Repository:
-
-```
-dev-mics-docker-repo
-```
-
-With:
-
-* Format: DOCKER
-* Region: us-east4
-* Cleanup policy: delete images older than 30 days
-* Labels applied
+| Field   | Example                      |
+| ------- | ---------------------------- |
+| format  | DOCKER                       |
+| type    | STANDARD                     |
+| tags    | team = id-card               |
+| labels  | environment = dev            |
+| cleanup | Delete images older than 30d |
 
 ---
 
-# 🔥 What You Can Customize
+# 🚀 What Happens When You Plan
 
-In tfvars, you can change:
+Terraform will:
 
-| Field                 | Example                 |
-| --------------------- | ----------------------- |
-| format                | DOCKER / MAVEN / PYTHON |
-| cleanup older_than    | 7d / 14d / 30d          |
-| tag_state             | ANY / TAGGED / UNTAGGED |
-| tag_prefixes          | ["release"]             |
-| package_name_prefixes | ["app"]                 |
+* Create repository
+* Set format
+* Set mode (type)
+* Merge labels + tags
+* Configure cleanup policy
 
 ---
 
-# 🚀 Enterprise Best Practice You’re Now Using
+# 🔥 Important Values For type
 
-✔ Modular
-✔ Environment driven
-✔ Dynamic for_each
-✔ Cleanup automated
-✔ No hardcoding
-✔ Matches your GCS & PubSub style
+Valid values:
+
+```
+STANDARD
+REMOTE
+VIRTUAL
+```
+
+If you pass anything else → Terraform will fail.
 
 ---
 
-# ⚠️ Role Reminder
+# 🎯 You Now Have
 
-Infra SA must have:
-
-```
-roles/artifactregistry.admin
-```
-
-You already have that ✅
+✔ Enterprise-level module
+✔ Supports mode (type)
+✔ Supports tags
+✔ Cleanup automation
+✔ Fully dynamic
+✔ Matches your GCS & PubSub pattern
 
 ---
 
-# 🎯 Next Logical Step
+Next logical service in your story:
 
-Now that you have:
+* Secret Manager?
+* Vertex AI API enable module?
+* Dataform?
+* Dataplex?
 
-* GCS module ✅
-* PubSub module ✅
-* Artifact Registry module ✅
-
-Next in your story:
-
-```
-secretmanager
-vertex-ai (API enable)
-dataform
-dataplex
-```
-
-Which one do you want next?
+Tell me which one we build next.
