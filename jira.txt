@@ -1,3 +1,74 @@
+While developing Terraform modules for multiple GCP services (e.g., Pub/Sub, Artifact Registry, Dataplex, Secret Manager, etc.), some service-level IAM permissions are still pending for the Infra Service Account.
+
+This story focuses on:
+
+Testing Terraform plan/apply behavior
+
+Capturing permission errors
+
+Identifying exact IAM roles required
+
+Documenting least-privilege access needs
+
+🔷 Scope
+1️⃣ Terraform Plan Validation
+
+Run terraform plan for each service module
+
+Capture permission-related errors
+
+Identify missing API enablement issues
+
+2️⃣ Terraform Apply (Where Possible)
+
+Attempt controlled apply in lower environment
+
+Validate resource creation behavior
+
+Rollback test resources if created
+
+3️⃣ IAM Gap Analysis
+
+Extract exact permission denied errors
+
+Map required roles (e.g., roles/pubsub.admin, roles/artifactregistry.admin)
+
+Avoid assigning overly broad roles (e.g., Owner/Editor)
+
+4️⃣ API Enablement Verification
+
+Confirm required GCP APIs are enabled
+
+Identify missing service usage roles
+
+🔷 Services Under Testing (Example – Modify Based on Your Context)
+
+Pub/Sub
+
+Artifact Registry
+
+Secret Manager
+
+Dataplex
+
+Dataform
+
+Vertex AI
+
+Cloud Run
+
+Monitoring / Alerting
+
+
+
+
+
+
+
+
+
+
+
 Excellent 👌 — this is exactly how a spike should be documented:
 Clear research → validated steps → recommended approach → ready for implementation.
 
