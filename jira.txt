@@ -1,8 +1,259 @@
-import logging
+Perfect 👌
+For your **baseline infra story**, we’ll do:
 
-def init_logging_config():
-    logging.basicConfig(
-        level=logging.DEBUG,
-        filename="logs/flashpoint.log",
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
+✅ Enable Vertex AI API
+✅ Create staging GCS bucket (with CMEK)
+❌ No endpoints
+❌ No model deployment
+❌ No IAM bindings
+✔ Follow your same modular pattern (for_each, map(object), tfvars driven)
+
+---
+
+# 🔷 Quick Concept Before Terraform
+
+## 👉 Vertex AI
+
+To use Vertex AI:
+
+1. You must enable:
+
+   ```
+   aiplatform.googleapis.com
+   ```
+2. Training jobs require a staging bucket
+3. Bucket must be:
+
+   * Same region as Vertex
+   * CMEK encrypted (your org enforces it)
+4. Vertex internal service account must have KMS permission
+
+---
+
+# 🔷 What We Will Create
+
+Terraform will create:
+
+```
+google_project_service (Vertex AI API)
+google_storage_bucket (Vertex staging bucket)
+```
+
+Bucket will include:
+
+* CMEK
+* Labels
+* Uniform bucket access
+* Optional lifecycle
+
+---
+
+# 📁 Folder Structure
+
+```
+modules/
+  vertexai/
+    main.tf
+    variables.tf
+    outputs.tf
+```
+
+---
+
+# 📁 modules/vertexai/main.tf
+
+```hcl
+resource "google_project_service" "vertex_api" {
+  service = "aiplatform.googleapis.com"
+  project = var.project_id
+}
+
+
+resource "google_storage_bucket" "vertex_staging" {
+  for_each = var.staging_buckets
+
+  name     = each.key
+  project  = var.project_id
+  location = each.value.location
+
+  uniform_bucket_level_access = true
+
+  labels = each.value.labels
+
+  encryption {
+    default_kms_key_name = each.value.kms_key_name
+  }
+
+  lifecycle_rule {
+    action {
+      type = "Delete"
+    }
+    condition {
+      age = each.value.lifecycle_age
+    }
+  }
+
+  depends_on = [
+    google_project_service.vertex_api
+  ]
+}
+```
+
+---
+
+# 📁 modules/vertexai/variables.tf
+
+```hcl
+variable "project_id" {
+  type        = string
+  description = "Project ID"
+}
+
+variable "staging_buckets" {
+  type = map(object({
+    location      = string
+    kms_key_name  = string
+    lifecycle_age = number
+    labels        = map(string)
+  }))
+}
+```
+
+---
+
+# 📁 modules/vertexai/outputs.tf
+
+```hcl
+output "staging_bucket_names" {
+  value = keys(google_storage_bucket.vertex_staging)
+}
+```
+
+---
+
+# 📁 root/main.tf (ADD MODULE)
+
+```hcl
+module "vertexai" {
+  source = "./modules/vertexai"
+
+  project_id      = var.project_id
+  staging_buckets = var.vertex_staging_buckets
+}
+```
+
+---
+
+# 📁 root/variables.tf (ADD VARIABLE)
+
+```hcl
+variable "vertex_staging_buckets" {
+  type = map(object({
+    location      = string
+    kms_key_name  = string
+    lifecycle_age = number
+    labels        = map(string)
+  }))
+}
+```
+
+---
+
+# 📁 tfvars/mics-hcb-dev.tfvars
+
+Use SAME KMS key you used for:
+
+* GCS
+* Artifact Registry
+* Secret Manager
+* Dataplex
+* Dataform
+
+```hcl
+vertex_staging_buckets = {
+
+  "dev-mics-vertex-staging" = {
+    location      = "us-east4"
+
+    kms_key_name  = "projects/cvs-key-vault-nonprod/locations/us-east4/keyRings/gkr-nonprod-us-east4/cryptoKeys/gk-hcb-nonprod-mics-us-east4"
+
+    lifecycle_age = 30
+
+    labels = {
+      environment = "dev"
+      managed-by  = "terraform"
+      application = "mics"
+      service     = "vertex-ai"
+    }
+  }
+
+}
+```
+
+---
+
+# 🔴 VERY IMPORTANT — CMEK Permission
+
+Grant KMS access to Vertex AI service account:
+
+```bash
+PROJECT_NUMBER=$(gcloud projects describe hcb-nonprod-mics --format="value(projectNumber)")
+
+gcloud kms keys add-iam-policy-binding gk-hcb-nonprod-mics-us-east4 \
+  --keyring=gkr-nonprod-us-east4 \
+  --location=us-east4 \
+  --member="serviceAccount:service-${PROJECT_NUMBER}@gcp-sa-aiplatform.iam.gserviceaccount.com" \
+  --role="roles/cloudkms.cryptoKeyEncrypterDecrypter"
+```
+
+If skipped → training jobs will fail later.
+
+---
+
+# 🔷 Required IAM For Infra SA
+
+Infra SA must have:
+
+```
+roles/aiplatform.admin
+roles/storage.admin
+roles/serviceusage.serviceUsageAdmin
+```
+
+Otherwise API enable may fail.
+
+---
+
+# 🔷 What Terraform Now Creates
+
+✔ Enables Vertex AI
+✔ Creates CMEK-encrypted staging bucket
+✔ Adds lifecycle rule
+✔ Labels applied
+✔ Depends on API enable
+
+---
+
+# 🔷 Your Full Baseline Stack Now Includes
+
+✔ GCS
+✔ Pub/Sub
+✔ Artifact Registry (CMEK)
+✔ Secret Manager (CMEK)
+✔ Dataform (CMEK)
+✔ Dataplex (CMEK)
+✔ Vertex AI (API + CMEK staging bucket)
+
+You’ve basically built a full enterprise data + AI foundation.
+
+---
+
+If you want next, we can:
+
+* Create a centralized API enable module
+* Refactor repeated CMEK logic
+* Create Service Account module
+* Create environment separation (dev/qa)
+* Prepare summary documentation for your story
+
+Tell me the next step 🚀
