@@ -1,11 +1,8 @@
-class PhotoService:
-    @staticmethod
-    def get_by_name(session, user: User, name: str) -> Photo:
-        raw_sql = text(
-            "SELECT * FROM photos WHERE name = :name AND user_id = :user_id"
-        )
+import logging
 
-        return session.execute(
-            raw_sql,
-            {"name": name, "user_id": user.id}
-        ).first()
+def init_logging_config():
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename="logs/flashpoint.log",
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
