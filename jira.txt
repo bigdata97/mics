@@ -1,99 +1,136 @@
-In Kubernetes (like in your **GKE cluster** for the ID Card System project), you can create a namespace using simple `kubectl` commands.
+To check **Service Accounts (SA)** in **GKE** using `kubectl`, you can use the following commands.
 
 ---
 
-## ✅ 1️⃣ Create Namespace (Direct Command)
+## 1️⃣ List all Service Accounts in a namespace
 
 ```bash
-kubectl create namespace <namespace-name>
+kubectl get sa -n <namespace>
 ```
-
-### Example:
-
-```bash
-kubectl create namespace mics-dev
-```
-
-### Verify:
-
-```bash
-kubectl get namespaces
-```
-
----
-
-## ✅ 2️⃣ Create Namespace Using YAML (Recommended in Enterprise Projects)
-
-In production projects (like yours with **Git + GKE + CI/CD**), YAML-based creation is preferred.
-
-### Step 1: Create a file `namespace.yaml`
-
-```yaml
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: mics-dev
-  labels:
-    environment: dev
-```
-
-### Step 2: Apply it
-
-```bash
-kubectl apply -f namespace.yaml
-```
-
----
-
-## ✅ 3️⃣ Check Namespace Details
-
-```bash
-kubectl describe namespace mics-dev
-```
-
----
-
-## ✅ 4️⃣ Deploy Resources into That Namespace
 
 Example:
 
 ```bash
-kubectl apply -f deployment.yaml -n mics-dev
+kubectl get sa -n default
 ```
 
-Or set default namespace for your session:
+Output example:
 
 ```bash
-kubectl config set-context --current --namespace=mics-dev
+NAME      SECRETS   AGE
+default   1         25d
+app-sa    1         10d
 ```
 
 ---
 
-## 🚀 Best Practice for Your MICS Project
+## 2️⃣ List Service Accounts in all namespaces
 
-Since you're working with:
+```bash
+kubectl get sa --all-namespaces
+```
 
-* **GKE**
-* **Git**
-* **CI/CD (GitHub Actions / Jenkins)**
-* **Terraform for infra**
-* **ArgoCD for deployments**
+or
 
-👉 Namespace creation should ideally be:
-
-* Managed via **Terraform (kubernetes_namespace resource)**
-  OR
-* Created via **ArgoCD manifest**
-
-Not manually in production.
+```bash
+kubectl get serviceaccounts -A
+```
 
 ---
 
-If you want, I can also give you:
+## 3️⃣ Describe a specific Service Account
 
-* ✅ Terraform code to create namespace
-* ✅ ArgoCD namespace manifest example
-* ✅ Multi-environment namespace strategy (dev/qa/prod)
-* ✅ RBAC attached to namespace
+```bash
+kubectl describe sa <sa-name> -n <namespace>
+```
 
-Just tell me what you need 👌
+Example:
+
+```bash
+kubectl describe sa app-sa -n default
+```
+
+This shows:
+
+* Labels
+* Annotations
+* Tokens
+* Image pull secrets
+
+---
+
+## 4️⃣ Check which Service Account a Pod is using
+
+Very important in GKE 👇
+
+```bash
+kubectl get pod <pod-name> -n <namespace> -o jsonpath='{.spec.serviceAccountName}'
+```
+
+Example:
+
+```bash
+kubectl get pod my-app-pod -n default -o jsonpath='{.spec.serviceAccountName}'
+```
+
+If nothing is specified, it uses:
+
+```
+default
+```
+
+---
+
+## 5️⃣ If using Workload Identity (GKE → GCP SA mapping)
+
+In GKE with **Workload Identity**, Kubernetes SA is annotated with a GCP SA.
+
+Check annotation:
+
+```bash
+kubectl get sa <sa-name> -n <namespace> -o yaml
+```
+
+Look for:
+
+```yaml
+annotations:
+  iam.gke.io/gcp-service-account: my-gcp-sa@project-id.iam.gserviceaccount.com
+```
+
+That tells you which **GCP Service Account** is mapped.
+
+---
+
+## 6️⃣ Quick way to see SA for all pods in a namespace
+
+```bash
+kubectl get pods -n <namespace> -o custom-columns=NAME:.metadata.name,SA:.spec.serviceAccountName
+```
+
+Example:
+
+```bash
+kubectl get pods -n default -o custom-columns=NAME:.metadata.name,SA:.spec.serviceAccountName
+```
+
+---
+
+# 🎯 Summary
+
+| What you want                   | Command                                                          |
+| ------------------------------- | ---------------------------------------------------------------- |
+| List SAs                        | `kubectl get sa -n <ns>`                                         |
+| Describe SA                     | `kubectl describe sa <name> -n <ns>`                             |
+| Pod's SA                        | `kubectl get pod <pod> -o jsonpath='{.spec.serviceAccountName}'` |
+| Check Workload Identity mapping | `kubectl get sa <name> -o yaml`                                  |
+
+---
+
+If you want, tell me:
+
+* Are you debugging Workload Identity?
+* Or checking RBAC issue?
+* Or checking ArgoCD/GitHub Actions deployment SA?
+
+I can guide you step-by-step based on your exact GKE setup.
