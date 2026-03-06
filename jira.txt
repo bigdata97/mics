@@ -1,59 +1,498 @@
-You can send a **short, polite, professional email** asking them to verify and resend the referral invitation. Here are two good options.
+Below is an **expanded and clearer version of the Confluence document**, with the improvements you asked for:
+
+* **Point 4 rewritten clearly**
+* **Sequence diagram added**
+* **Example CI pipeline YAML added**
+* Written in a way another engineer can **implement without ambiguity**
+
+You can **copy-paste directly into Confluence**.
 
 ---
 
-### Option 1 – Simple & Professional
+# Branch-Based Environment Deployment Strategy
 
-Hi Hardik,
-
-Thank you for referring my friend for the position.
-
-He has not yet received the automated email to apply and upload his resume. Could you please verify whether the referral invitation was sent successfully?
-
-The email IDs that may have been used are:
-
-* [azad05@msn.com](mailto:azad05@msn.com)
-* [azad0525@gmail.com](mailto:azad0525@gmail.com)
-
-If possible, could you please confirm which email ID the invitation was sent to or resend the application link?
-
-Thank you for your help.
-
-Best regards,
-Eswar
+**Project:** ID Cards Excellence
+**Story:** TLIDCE-2020
+**Type:** Spike – Research & Design
+**Author:** DevOps Team
 
 ---
 
-### Option 2 – Slightly More Polite (Recommended)
+# 1. Objective
 
-Hi Hardik,
+The objective of this spike is to design a **branch-based deployment strategy** where application deployments are automatically triggered to the correct environment based on the Git branch used.
 
-Thank you for referring my friend for the position.
+This enables:
 
-He has not yet received the automated email to apply and upload his resume. Could you please check if the referral invitation was triggered successfully?
+• automated CI/CD pipelines
+• consistent environment promotion
+• clear separation of DEV / QA / PERF / PROD deployments
+• predictable release workflow
 
-The possible email IDs are:
-
-* [azad05@msn.com](mailto:azad05@msn.com)
-* [azad0525@gmail.com](mailto:azad0525@gmail.com)
-
-If convenient, could you please confirm the email ID used for the referral or resend the application invitation?
-
-Appreciate your help.
-
-Best regards,
-Eswar
+The outcome of this spike is a **complete implementation design** that another engineer can implement.
 
 ---
 
-💡 **Tip:**
-Also ask your friend to check:
+# 2. Problem Statement
 
-* **Spam / Junk folder**
-* **Promotions tab (Gmail)**
+Currently deployments are not explicitly tied to Git branch activity. This can lead to:
 
-Sometimes referral emails from **Aetna/CVS systems** go there.
+* unclear promotion paths between environments
+* inconsistent deployment behavior
+* manual intervention during releases
+
+To resolve this, we propose a **branch-to-environment mapping strategy** integrated with CI pipelines and GitOps deployment tools.
 
 ---
 
-If you want, I can also help you write a **Slack/Teams message version (very common inside companies)** which is usually faster than email.
+# 3. Branch to Environment Mapping
+
+| Git Branch | Environment | Purpose                                |
+| ---------- | ----------- | -------------------------------------- |
+| develop    | DEV         | Developer integration testing          |
+| release/*  | QA / PERF   | System testing and performance testing |
+| main       | PROD        | Production deployment                  |
+
+Important note:
+
+This strategy **does NOT automatically move code between branches**.
+
+Promotion between environments is done using **Pull Requests**.
+
+Example:
+
+```
+feature → develop → release/v1.0 → main
+```
+
+---
+
+# 4. High-Level Architecture (CLEAR IMPLEMENTATION VIEW)
+
+This architecture shows **how code moves from Git to Kubernetes environments**.
+
+### Key Components
+
+1. **Git Repository**
+
+   * Developers push code to branches.
+
+2. **CI Pipeline**
+
+   * Triggered automatically based on branch.
+   * Builds Docker image.
+   * Tags image based on environment.
+   * Pushes image to container registry.
+
+3. **Container Registry**
+
+   * Stores built Docker images.
+   * Images are tagged by environment.
+
+4. **Deployment System (ArgoCD / CD Pipeline)**
+
+   * Pulls the new image version.
+   * Updates Kubernetes deployment.
+
+5. **Kubernetes Cluster (GKE)**
+
+   * Runs application workloads.
+
+---
+
+### Complete Deployment Flow
+
+```
+Developer Push
+      │
+      ▼
+Git Repository (develop / release / main)
+      │
+      ▼
+CI Pipeline Trigger
+      │
+      ▼
+Docker Image Build
+      │
+      ▼
+Image Tagging
+      │
+      ▼
+Push Image → Container Registry
+      │
+      ▼
+ArgoCD detects change
+      │
+      ▼
+Kubernetes Deployment Update
+      │
+ ┌─────────────┬─────────────┬─────────────┐
+ ▼             ▼             ▼
+DEV            QA/PERF       PROD
+Environment    Environment   Environment
+```
+
+---
+
+# 5. Detailed Deployment Flow
+
+---
+
+# DEV Deployment Flow
+
+Trigger:
+
+```
+Push to develop branch
+```
+
+Process:
+
+```
+Developer pushes code
+        │
+        ▼
+CI pipeline triggered
+        │
+        ▼
+Docker image built
+        │
+        ▼
+Image tagged as DEV
+        │
+        ▼
+Image pushed to registry
+        │
+        ▼
+ArgoCD deploys to DEV
+```
+
+Purpose:
+
+• developer testing
+• integration testing
+
+---
+
+# QA / PERF Deployment Flow
+
+Trigger:
+
+```
+Push to release/* branch
+```
+
+Process:
+
+```
+Release branch created
+        │
+        ▼
+CI pipeline triggered
+        │
+        ▼
+Docker image built
+        │
+        ▼
+Image tagged QA
+        │
+        ▼
+Image pushed
+        │
+        ▼
+ArgoCD deploys to QA/PERF
+```
+
+Purpose:
+
+• QA validation
+• regression testing
+• performance testing
+
+---
+
+# PROD Deployment Flow
+
+Trigger:
+
+```
+Merge release branch → main
+```
+
+Process:
+
+```
+PR approved
+        │
+        ▼
+Code merged to main
+        │
+        ▼
+CI pipeline triggered
+        │
+        ▼
+Docker image built
+        │
+        ▼
+Image tagged PROD
+        │
+        ▼
+Image pushed
+        │
+        ▼
+ArgoCD deploys to PROD
+```
+
+Purpose:
+
+• production release
+
+---
+
+# 6. CI Pipeline Design
+
+CI pipeline must trigger based on branch conditions.
+
+Example logic:
+
+| Branch    | Action                       |
+| --------- | ---------------------------- |
+| develop   | Build image + deploy DEV     |
+| release/* | Build image + deploy QA/PERF |
+| main      | Build image + deploy PROD    |
+
+Pseudo logic:
+
+```
+if branch == develop
+   deploy DEV
+
+if branch startsWith release/
+   deploy QA/PERF
+
+if branch == main
+   deploy PROD
+```
+
+---
+
+# 7. Example CI Pipeline YAML
+
+Example structure (generic CI):
+
+```yaml
+name: Build and Deploy
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - release/*
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Build Docker Image
+        run: |
+          docker build -t my-app:${{ github.sha }} .
+
+      - name: Push Docker Image
+        run: |
+          docker push my-app:${{ github.sha }}
+
+  deploy-dev:
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to DEV
+        run: echo "Deploying to DEV environment"
+
+  deploy-qa:
+    if: startsWith(github.ref, 'refs/heads/release/')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to QA
+        run: echo "Deploying to QA environment"
+
+  deploy-prod:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy to PROD
+        run: echo "Deploying to PROD environment"
+```
+
+---
+
+# 8. Sequence Diagram (End-to-End Flow)
+
+```
+Developer
+   │
+   │ Push Code
+   ▼
+Git Repository
+   │
+   │ Trigger CI
+   ▼
+CI Pipeline
+   │
+   │ Build Image
+   ▼
+Container Registry
+   │
+   │ New Image Available
+   ▼
+ArgoCD
+   │
+   │ Sync Application
+   ▼
+Kubernetes Cluster
+   │
+ ┌─────────────┬─────────────┬─────────────┐
+ ▼             ▼             ▼
+DEV            QA/PERF       PROD
+```
+
+---
+
+# 9. Docker Image Tagging Strategy
+
+| Branch       | Tag Example |
+| ------------ | ----------- |
+| develop      | dev-latest  |
+| release/v1.2 | qa-v1.2     |
+| main         | prod-v1.2   |
+
+Example command:
+
+```
+docker build -t app:dev .
+docker push app:dev
+```
+
+---
+
+# 10. Repository Structure Example
+
+```
+repo
+ ├── src
+ ├── Dockerfile
+ ├── k8s
+ │   ├── dev
+ │   ├── qa
+ │   └── prod
+ └── ci
+```
+
+---
+
+# 11. Validation Matrix
+
+| Branch    | Environment | Validation             |
+| --------- | ----------- | ---------------------- |
+| develop   | DEV         | Deployment successful  |
+| release/* | QA          | QA tests pass          |
+| release/* | PERF        | Performance tests pass |
+| main      | PROD        | Production release     |
+
+---
+
+# 12. End-to-End Test Scenarios
+
+### Scenario 1
+
+Push code to `develop`
+
+Expected result:
+
+• CI triggered
+• DEV deployment successful
+
+---
+
+### Scenario 2
+
+Create branch:
+
+```
+release/v1.0
+```
+
+Expected result:
+
+• QA deployment successful
+
+---
+
+### Scenario 3
+
+Merge release → main
+
+Expected result:
+
+• PROD deployment successful
+
+---
+
+# 13. Security Controls
+
+Recommended:
+
+| Branch    | Control              |
+| --------- | -------------------- |
+| main      | PR approval required |
+| release/* | PR approval required |
+| develop   | PR review required   |
+
+---
+
+# 14. Risks
+
+| Risk                       | Mitigation          |
+| -------------------------- | ------------------- |
+| accidental prod deployment | protect main branch |
+| wrong image deployed       | strict tagging      |
+| environment drift          | GitOps deployment   |
+
+---
+
+# 15. Recommended Implementation Steps
+
+1. define Git branch strategy
+2. configure CI pipeline triggers
+3. implement Docker image build
+4. configure container registry
+5. configure ArgoCD applications
+6. configure environment manifests
+7. test deployment flow
+8. validate deployment matrix
+
+---
+
+# 16. Spike Outcome
+
+This spike defines a **branch-based deployment strategy** that enables automated environment deployments aligned with Git branch workflows.
+
+The documented architecture will guide the implementation of CI/CD pipelines for the application.
+
+---
+
+If you want, I can also add **3 very powerful sections that senior DevOps engineers usually include in spike docs**:
+
+1️⃣ **ArgoCD Application YAML example**
+2️⃣ **Docker tagging strategy with Git SHA versioning**
+3️⃣ **Rollback strategy for production deployments**
+
+These make the document **10x stronger architecturally**.
