@@ -1,100 +1,253 @@
-Since this is a **Spike story**, your update should emphasize **research, documentation, architecture decisions, and guidance for implementation**, not implementation itself.
+Below is the **complete CI piece you should add to your existing workflow** (`mics-ui-components-ci.yaml`) to:
 
-Below are **three things you need**:
+1. Run **after `docker-push`**
+2. Generate the **same Docker tag used during push**
+3. Update **`k8s-manifests/deployment.yaml`**
+4. Commit the change back to the **same branch that triggered the workflow**
 
-1️⃣ **JIRA Comment Update**
-2️⃣ **Final JIRA Resolution Comment**
-3️⃣ **Scrum Meeting Update**
-
----
-
-# 1️⃣ Daily JIRA Comment Update (During Spike Work)
-
-Use this while you are still working on the spike.
-
-**Example comment:**
-
-Investigated and documented the branch-based environment deployment strategy for the CI/CD pipelines.
-
-The documentation covers:
-
-• Branch to environment mapping (develop → DEV, release/* → QA/PERF, main → PROD)
-• End-to-end deployment flow from Git → CI pipeline → container registry → ArgoCD → Kubernetes
-• CI pipeline triggering logic based on branch conditions
-• Docker image tagging strategy per environment
-• Git branching workflow for environment promotion using pull requests
-• Validation matrix and deployment test scenarios
-• Security considerations such as branch protection rules
-• Implementation guidance for the engineering team
-
-A detailed Confluence document has been created to guide the implementation team on configuring the CI pipelines and deployment strategy.
+I’ll also explain **exactly where to insert it**.
 
 ---
 
-# 2️⃣ Final JIRA Comment (When Spike Is Complete)
+# 1️⃣ Add Permission (Top of Workflow)
 
-Use this when **closing the spike**.
+At the **top of your workflow file**, add this if not present:
 
-Spike completed to design and document the branch-based deployment strategy for environment promotions.
+```yaml
+permissions:
+  contents: write
+```
 
-Key outcomes from the spike:
-
-• Defined branch to environment deployment mapping
- - develop → DEV
- - release/* → QA/PERF
- - main → PROD
-
-• Designed CI/CD workflow where pipelines trigger automatically based on Git branch activity.
-
-• Documented end-to-end architecture covering:
- Git → CI pipeline → Docker image build → Container registry → ArgoCD → Kubernetes environments.
-
-• Defined Docker image tagging strategy for environment-specific deployments.
-
-• Added sequence diagrams and CI pipeline examples to guide implementation.
-
-• Documented validation scenarios and deployment matrix for testing the pipeline behavior.
-
-The implementation team can use the Confluence documentation as a reference to configure CI pipelines and ArgoCD deployment workflows.
+This allows the workflow to **commit changes back to the repo**.
 
 ---
 
-# 3️⃣ Scrum Standup Update
+# 2️⃣ Add This Job AFTER `docker-push`
 
-Keep it **short, clear, and professional**.
+In your current pipeline you have:
 
-### Example:
+```
+notify-qa-deployment-approval
+        ↓
+docker-build
+        ↓
+docker-push
+```
 
-> Yesterday I worked on the spike story to research and document the branch-based deployment strategy for our CI/CD pipelines.
->
-> I created a detailed Confluence document describing the architecture, branch-to-environment mapping, CI pipeline logic, and deployment flow using container registry and ArgoCD.
->
-> This documentation will help the implementation team configure the pipelines so deployments automatically go to DEV, QA/PERF, and PROD based on the Git branch.
->
-> Today I will finalize the documentation and update the JIRA story with the spike outcome.
-
----
-
-# 4️⃣ If Your Manager Asks “What Did You Discover?”
-
-You can answer like this:
-
-> The spike confirmed that deployments should be triggered based on branch activity rather than automatically promoting code between branches.
->
-> The CI pipeline will build and tag Docker images depending on the branch, and the deployment system will deploy them to the appropriate environment.
+Add **this job immediately after `docker-push`**.
 
 ---
 
-# 5️⃣ One Line Summary (Very Useful in Scrum)
+# 3️⃣ Complete CI Job to Add
 
-If they want **very short update**:
+```yaml
+update-deployment-manifest:
+  name: Update Kubernetes Deployment Image
+  needs: docker-push
+  runs-on: self-hosted
 
-> Completed spike analysis for branch-based CI/CD deployment strategy and documented the full implementation approach in Confluence.
+  steps:
+
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref_name }}
+
+    - name: Print Branch
+      run: |
+        echo "Running on branch: $GITHUB_REF_NAME"
+
+    - name: Install yq
+      run: |
+        sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+        sudo chmod +x /usr/local/bin/yq
+        yq --version
+
+    - name: Generate Docker Tag
+      id: tag
+      run: |
+        TAG="${{ github.event.inputs.deployment-environment }}-${{ github.sha }}-${{ github.run_number }}"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Generated Docker tag: $TAG"
+
+    - name: Update deployment.yaml
+      run: |
+
+        FILE="k8s-manifests/deployment.yaml"
+
+        TAG="${{ steps.tag.outputs.tag }}"
+
+        IMAGE_REPO="cvsh.jfrog.io/cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components/mics-ui-components"
+
+        NEW_IMAGE="$IMAGE_REPO:$TAG"
+
+        echo "New image will be: $NEW_IMAGE"
+
+        export NEW_IMAGE
+
+        # Print old image
+        echo "Old image:"
+        yq e '.spec.template.spec.containers[] | select(.name=="mics-ui-components").image' $FILE
+
+        # Update YAML safely
+        yq e '(.spec.template.spec.containers[] | select(.name=="mics-ui-components").image) = strenv(NEW_IMAGE)' -i $FILE
+
+        echo "Updated image:"
+        yq e '.spec.template.spec.containers[] | select(.name=="mics-ui-components").image' $FILE
+
+    - name: Commit and Push Changes
+      run: |
+
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+
+        if [[ -n $(git status --porcelain) ]]; then
+          git add k8s-manifests/deployment.yaml
+          git commit -m "Update deployment image to ${{ steps.tag.outputs.tag }}"
+          git push origin $GITHUB_REF_NAME
+        else
+          echo "No changes detected"
+        fi
+```
 
 ---
 
-If you want, I can also show you **one powerful JIRA update many senior engineers add to spike stories**:
+# 4️⃣ What This Job Does (Step-by-Step)
 
-**“Spike Findings + Recommendation Section”**
+### Step 1 — Checkout the Same Branch
 
-This makes your spike look **much more architectural and senior-level**, and managers usually like it.
+```yaml
+ref: ${{ github.ref_name }}
+```
+
+This ensures:
+
+| Workflow Trigger | File Updated In     |
+| ---------------- | ------------------- |
+| main             | main                |
+| dev              | dev                 |
+| feature branch   | same feature branch |
+
+---
+
+### Step 2 — Install `yq`
+
+Used to **safely modify YAML**.
+
+---
+
+### Step 3 — Generate Docker Tag
+
+Same format used in your existing pipeline:
+
+```bash
+ENV-SHA-RUNNUMBER
+```
+
+Example:
+
+```
+dev-5f60faa02b4a54499c6311502d24c5fd8dd021e6-142
+```
+
+---
+
+### Step 4 — Update YAML Image Field
+
+Your YAML path:
+
+```
+spec
+ └ template
+    └ spec
+       └ containers
+          └ name: mics-ui-components
+             image: ...
+```
+
+The safe update query:
+
+```bash
+(.spec.template.spec.containers[] | select(.name=="mics-ui-components").image)
+```
+
+This ensures it **updates the correct container even if order changes**.
+
+---
+
+### Step 5 — Commit Changes
+
+Only commits if file actually changed.
+
+```
+git status --porcelain
+```
+
+Then pushes to:
+
+```
+origin $GITHUB_REF_NAME
+```
+
+---
+
+# 5️⃣ Result in Your Deployment File
+
+### Before
+
+```yaml
+image: cvsh.jfrog.io/.../mics-ui-components:5f60faa02b4a54499c6311502d24c5fd8dd021e6
+```
+
+### After
+
+```yaml
+image: cvsh.jfrog.io/.../mics-ui-components:dev-5f60faa02b4a54499c6311502d24c5fd8dd021e6-142
+```
+
+---
+
+# 6️⃣ Final Pipeline Flow
+
+Your pipeline becomes:
+
+```
+notify-qa-deployment-approval
+        ↓
+docker-build
+        ↓
+docker-push
+        ↓
+update-deployment-manifest
+        ↓
+commit deployment.yaml
+        ↓
+ArgoCD detects change
+        ↓
+new deployment rollout
+```
+
+This is **proper GitOps deployment behavior**.
+
+---
+
+# 7️⃣ Optional Enterprise Improvement (Recommended)
+
+Instead of committing directly to main/dev, some teams:
+
+1. Create a **new branch**
+2. Create **PR automatically**
+3. Approve
+4. Merge
+5. Deploy
+
+Safer for production.
+
+---
+
+✅ If you'd like, I can also show you a **much more advanced version used in big GitOps platforms** that automatically:
+
+* detects image name from YAML
+* extracts repo automatically
+* updates tag dynamically
+* works for **any Kubernetes deployment file** without hardcoding paths.
