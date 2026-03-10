@@ -1,253 +1,229 @@
-Below is the **complete CI piece you should add to your existing workflow** (`mics-ui-components-ci.yaml`) to:
+This is actually a **very good improvement story** for your setup because you are removing a **manual step in the GitOps workflow**. In environments using **Argo CD**, the **K8 manifests repo should ideally be updated automatically from CI** so deployments remain fully automated.
 
-1. Run **after `docker-push`**
-2. Generate the **same Docker tag used during push**
-3. Update **`k8s-manifests/deployment.yaml`**
-4. Commit the change back to the **same branch that triggered the workflow**
+I will give you:
 
-I’ll also explain **exactly where to insert it**.
-
----
-
-# 1️⃣ Add Permission (Top of Workflow)
-
-At the **top of your workflow file**, add this if not present:
-
-```yaml
-permissions:
-  contents: write
-```
-
-This allows the workflow to **commit changes back to the repo**.
+1️⃣ **How to explain this to your lead in sprint planning**
+2️⃣ **User story title**
+3️⃣ **Full story description**
+4️⃣ **Acceptance criteria**
+5️⃣ **Technical approach (for the implementation team)**
+6️⃣ **Definition of Done**
+7️⃣ **JIRA story content ready to paste**
 
 ---
 
-# 2️⃣ Add This Job AFTER `docker-push`
+# 1️⃣ What to Say in Sprint Planning
 
-In your current pipeline you have:
+You can say something like this:
 
-```
-notify-qa-deployment-approval
-        ↓
-docker-build
-        ↓
-docker-push
-```
+> Currently after the CI workflow builds and pushes the Docker image to **JFrog Artifactory**, we manually copy the generated Docker image tag and update it in the Kubernetes `deployment.yaml` inside the manifests folder.
+>
+> Since our deployments are managed through **ArgoCD GitOps**, this manual update is not ideal and introduces a risk of human error.
+>
+> I propose creating a user story to automate this process so that the CI workflow automatically updates the Docker image tag in the manifests and commits the change. This will ensure deployments happen automatically once CI completes.
 
-Add **this job immediately after `docker-push`**.
+Then say:
+
+> I would like to pick up this story in this sprint if the team agrees.
+
+This sounds **professional and proactive**.
 
 ---
 
-# 3️⃣ Complete CI Job to Add
+# 2️⃣ User Story Title
 
-```yaml
-update-deployment-manifest:
-  name: Update Kubernetes Deployment Image
-  needs: docker-push
-  runs-on: self-hosted
+**Automate Docker Image Tag Update in Kubernetes Manifests after CI Build**
 
-  steps:
+or shorter:
 
-    - name: Checkout Repository
-      uses: actions/checkout@v4
-      with:
-        ref: ${{ github.ref_name }}
+**Automate Image Tag Update for ArgoCD Deployments**
 
-    - name: Print Branch
-      run: |
-        echo "Running on branch: $GITHUB_REF_NAME"
+---
 
-    - name: Install yq
-      run: |
-        sudo curl -L https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
-        sudo chmod +x /usr/local/bin/yq
-        yq --version
+# 3️⃣ User Story Description
 
-    - name: Generate Docker Tag
-      id: tag
-      run: |
-        TAG="${{ github.event.inputs.deployment-environment }}-${{ github.sha }}-${{ github.run_number }}"
-        echo "tag=$TAG" >> $GITHUB_OUTPUT
-        echo "Generated Docker tag: $TAG"
+Here is a **professional description you can paste in JIRA**.
 
-    - name: Update deployment.yaml
-      run: |
+---
 
-        FILE="k8s-manifests/deployment.yaml"
+### User Story
 
-        TAG="${{ steps.tag.outputs.tag }}"
+Currently, after the CI pipeline builds and pushes a Docker image to **JFrog Artifactory**, the generated Docker image tag must be manually copied and updated in the Kubernetes `deployment.yaml` file located under the `k8-manifests` directory.
 
-        IMAGE_REPO="cvsh.jfrog.io/cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components/mics-ui-components"
+Since our deployments follow a **GitOps model using ArgoCD**, the Kubernetes manifests repository acts as the source of truth. Any change in the manifests triggers ArgoCD to synchronize and deploy the new version to the cluster.
 
-        NEW_IMAGE="$IMAGE_REPO:$TAG"
+However, the current manual process introduces several challenges:
 
-        echo "New image will be: $NEW_IMAGE"
+* Manual effort after every CI build
+* Risk of human error when copying image tags
+* Delayed deployments due to manual intervention
+* Inconsistent deployment practices
 
-        export NEW_IMAGE
+To improve the CI/CD workflow, we propose implementing an automation mechanism where the CI pipeline automatically updates the Docker image tag in the Kubernetes manifest files and commits the change to the repository. This will allow ArgoCD to automatically detect the update and deploy the latest image.
 
-        # Print old image
-        echo "Old image:"
-        yq e '.spec.template.spec.containers[] | select(.name=="mics-ui-components").image' $FILE
+This enhancement will ensure a **fully automated GitOps-based deployment workflow**.
 
-        # Update YAML safely
-        yq e '(.spec.template.spec.containers[] | select(.name=="mics-ui-components").image) = strenv(NEW_IMAGE)' -i $FILE
+---
 
-        echo "Updated image:"
-        yq e '.spec.template.spec.containers[] | select(.name=="mics-ui-components").image' $FILE
+# 4️⃣ Acceptance Criteria
 
-    - name: Commit and Push Changes
-      run: |
+### AC1
 
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
+When the **CI workflow completes successfully**, the generated Docker image tag should be automatically captured.
 
-        if [[ -n $(git status --porcelain) ]]; then
-          git add k8s-manifests/deployment.yaml
-          git commit -m "Update deployment image to ${{ steps.tag.outputs.tag }}"
-          git push origin $GITHUB_REF_NAME
-        else
-          echo "No changes detected"
-        fi
+### AC2
+
+The CI pipeline should update the Docker image tag in the appropriate Kubernetes `deployment.yaml` file inside the `k8-manifests` directory.
+
+Example:
+
+Before:
+
+```
+image: jfrog.company.com/my-app:old-tag
+```
+
+After:
+
+```
+image: jfrog.company.com/my-app:new-ci-tag
 ```
 
 ---
 
-# 4️⃣ What This Job Does (Step-by-Step)
+### AC3
 
-### Step 1 — Checkout the Same Branch
+The pipeline should automatically:
 
-```yaml
-ref: ${{ github.ref_name }}
-```
-
-This ensures:
-
-| Workflow Trigger | File Updated In     |
-| ---------------- | ------------------- |
-| main             | main                |
-| dev              | dev                 |
-| feature branch   | same feature branch |
+* commit the change
+* push the update to the target branch.
 
 ---
 
-### Step 2 — Install `yq`
+### AC4
 
-Used to **safely modify YAML**.
+Once the manifest repository is updated, **ArgoCD should automatically detect the change and sync the deployment**.
 
 ---
 
-### Step 3 — Generate Docker Tag
+### AC5
 
-Same format used in your existing pipeline:
+The automation should support **environment-specific updates**, such as:
 
-```bash
-ENV-SHA-RUNNUMBER
-```
+* dev
+* qa
+* uat
+* prod
+
+---
+
+### AC6
+
+The pipeline should include validation to ensure the image tag update was successful before committing changes.
+
+---
+
+# 5️⃣ Technical Approach (Implementation Guidance)
+
+This is helpful for whoever implements the story.
+
+### Step 1
+
+Capture image tag from CI build.
 
 Example:
 
 ```
-dev-5f60faa02b4a54499c6311502d24c5fd8dd021e6-142
+IMAGE_TAG=${{ github.sha }}
 ```
 
 ---
 
-### Step 4 — Update YAML Image Field
+### Step 2
 
-Your YAML path:
+Update deployment file automatically.
 
-```
-spec
- └ template
-    └ spec
-       └ containers
-          └ name: mics-ui-components
-             image: ...
-```
-
-The safe update query:
-
-```bash
-(.spec.template.spec.containers[] | select(.name=="mics-ui-components").image)
-```
-
-This ensures it **updates the correct container even if order changes**.
-
----
-
-### Step 5 — Commit Changes
-
-Only commits if file actually changed.
+Example:
 
 ```
-git status --porcelain
-```
-
-Then pushes to:
-
-```
-origin $GITHUB_REF_NAME
+sed -i "s|image: .*|image: jfrog.company.com/my-app:${IMAGE_TAG}|g" k8-manifests/deployment.yaml
 ```
 
 ---
 
-# 5️⃣ Result in Your Deployment File
+### Step 3
 
-### Before
+Commit changes
 
-```yaml
-image: cvsh.jfrog.io/.../mics-ui-components:5f60faa02b4a54499c6311502d24c5fd8dd021e6
+Example:
+
 ```
+git config user.name "github-actions"
+git config user.email "github-actions@company.com"
 
-### After
-
-```yaml
-image: cvsh.jfrog.io/.../mics-ui-components:dev-5f60faa02b4a54499c6311502d24c5fd8dd021e6-142
+git add k8-manifests/deployment.yaml
+git commit -m "Update image tag to ${IMAGE_TAG}"
+git push origin main
 ```
 
 ---
 
-# 6️⃣ Final Pipeline Flow
+### Step 4
 
-Your pipeline becomes:
-
-```
-notify-qa-deployment-approval
-        ↓
-docker-build
-        ↓
-docker-push
-        ↓
-update-deployment-manifest
-        ↓
-commit deployment.yaml
-        ↓
-ArgoCD detects change
-        ↓
-new deployment rollout
-```
-
-This is **proper GitOps deployment behavior**.
+ArgoCD auto-sync deploys the change.
 
 ---
 
-# 7️⃣ Optional Enterprise Improvement (Recommended)
+# 6️⃣ Definition of Done
 
-Instead of committing directly to main/dev, some teams:
+The story will be considered complete when:
 
-1. Create a **new branch**
-2. Create **PR automatically**
-3. Approve
-4. Merge
-5. Deploy
-
-Safer for production.
+* CI pipeline automatically updates Docker image tag.
+* No manual update required in `deployment.yaml`.
+* ArgoCD automatically deploys the updated image.
+* Deployment works successfully in the target environment.
+* Documentation updated if necessary.
 
 ---
 
-✅ If you'd like, I can also show you a **much more advanced version used in big GitOps platforms** that automatically:
+# 7️⃣ Optional Future Enhancement (Mention in Story)
 
-* detects image name from YAML
-* extracts repo automatically
-* updates tag dynamically
-* works for **any Kubernetes deployment file** without hardcoding paths.
+You can mention this improvement too.
+
+Future improvements may include:
+
+* Implementing **ArgoCD Image Updater** for automated image tracking.
+* Supporting **multi-environment image promotion workflows**.
+
+---
+
+# 8️⃣ Bonus: How Senior Engineers Usually Do This
+
+There are **two common solutions**:
+
+### Option 1 (Simple — what you propose)
+
+CI updates manifest → commit → ArgoCD deploys.
+
+### Option 2 (Advanced)
+
+Use **Argo CD Image Updater
+
+This automatically updates images in Git.
+
+---
+
+# 9️⃣ Lead Impression Tip
+
+Your lead will like this story because it:
+
+✔ removes manual work
+✔ improves CI/CD maturity
+✔ follows GitOps best practices
+✔ reduces deployment errors
+
+---
+
+✅ If you want, I can also show you something **even more impressive for sprint planning**:
+
+**A full architecture diagram of the automated CI → JFrog → GitOps → ArgoCD flow**, which will make your proposal look **senior DevOps level**.
