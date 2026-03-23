@@ -4,17 +4,18 @@
     REPO: ${{ github.event.inputs.repo_name }}
   run: |
 
-    RULESET_NAME="main-protection"
+    RULESET_NAME="branch-protection-policies"
 
     echo "Checking if ruleset already exists..."
 
-    RULESET_ID=$(gh api \
-      repos/cvs-health-source-code/$REPO/rulesets \
-      --jq ".rulesets[] | select(.name==\"$RULESET_NAME\") | .id")
+    RULESET_ID=$(gh api repos/cvs-health-source-code/$REPO/rulesets \
+      --jq '.[] | select(.name=="'"$RULESET_NAME"'") | .id')
+
+    echo "Ruleset ID found: $RULESET_ID"
 
     if [ -z "$RULESET_ID" ]; then
 
-      echo "Ruleset not found → Creating new ruleset"
+      echo "Ruleset not found → Creating"
 
       gh api \
         --method POST \
@@ -23,10 +24,10 @@
 
     else
 
-      echo "Ruleset exists (ID: $RULESET_ID) → Updating ruleset"
+      echo "Ruleset exists → Updating"
 
       gh api \
-        --method PATCH \
+        --method PUT \
         repos/cvs-health-source-code/$REPO/rulesets/$RULESET_ID \
         --input .github/rulesets/main-ruleset.json
 
