@@ -1,89 +1,13 @@
-provision:
-  runs-on: self-hosted
+- name: Wait until repo is fully ready
+  env:
+    GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+  run: |
+    for i in {1..20}; do
+      echo "Checking repo readiness attempt $i"
 
-  steps:
+      gh api repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} \
+        --jq '.default_branch' && break
 
-    - name: Checkout
-      uses: actions/checkout@v4
-
-
-    # ⭐ Generate GitHub App Token
-    - name: Generate GitHub App Token
-      id: app-token
-      uses: cvs-health-source-code/cvs-gha-github-app-token@v2
-      with:
-        app_id: ${{ secrets.CVS_RELEASE_PLEASE_APP_ID }}
-        private_key: ${{ secrets.CVS_RELEASE_PLEASE_PRIVATE_KEY }}
-
-
-    # ⭐ Create Repo From Template (TEMP PRIVATE)
-    - name: Create Repo From Template
-      env:
-        GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      run: |
-        gh api \
-          --method POST \
-          repos/cvs-health-source-code/mics-create-repo-template/generate \
-          -f owner=cvs-health-source-code \
-          -f name="${{ github.event.inputs.repo_name }}" \
-          -f description="${{ github.event.inputs.description }}" \
-          -F private=true \
-          -F include_all_branches=true
-
-
-    # ⭐ WAIT UNTIL REPO EXISTS (SAFE POLLING)
-    - name: Wait For Repo Creation
-      env:
-        GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      run: |
-        echo "Waiting for repo to be available..."
-
-        until gh api repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} >/dev/null 2>&1
-        do
-          echo "Still waiting..."
-          sleep 3
-        done
-
-        echo "Repo is ready"
-
-
-    # ⭐ CONVERT REPO TO INTERNAL
-    - name: Set Repo Visibility Internal
-      env:
-        GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      run: |
-        gh api \
-          --method PATCH \
-          repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} \
-          -f visibility=internal
-
-
-    # ⭐ UPDATE REPO SETTINGS (MERGE STRATEGIES ETC)
-    - name: Configure Repo Settings
-      env:
-        GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      run: |
-        gh api \
-          --method PATCH \
-          repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} \
-          -F allow_auto_merge=true \
-          -F allow_merge_commit=false \
-          -F allow_rebase_merge=false \
-          -F allow_squash_merge=true \
-          -F delete_branch_on_merge=true
-
-
-    # ⭐ OPTIONAL — ASSIGN TEAMS (example)
-    - name: Assign Teams
-      env:
-        GH_TOKEN: ${{ steps.app-token.outputs.token }}
-      run: |
-        gh api \
-          --method PUT \
-          orgs/cvs-health-source-code/teams/mics-leads/repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} \
-          -f permission=admin
-
-        gh api \
-          --method PUT \
-          orgs/cvs-health-source-code/teams/mics-dev-team/repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} \
-          -f permission=push
+      echo "Repo not ready yet..."
+      sleep 5
+    done
