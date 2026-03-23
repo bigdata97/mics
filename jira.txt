@@ -1,96 +1,23 @@
-# ========================
-# OS Files
-# ========================
-.DS_Store
-Thumbs.db
-Desktop.ini
-*~
+## 📘 Overview
 
-# ========================
-# VS Code
-# ========================
-.vscode/*
-!.vscode/settings.json
-!.vscode/extensions.json
-!.vscode/launch.json
+This repository contains the source code and related assets for the **__SERVICE_NAME__** application.
 
-# ========================
-# Logs / Temp
-# ========================
-*.log
-logs/
-tmp/
-temp/
-*.tmp
-*.swp
-*.swo
+The repository has been created using the organization’s **standard repository template** to ensure consistent structure, governance, and development practices across all projects.
 
-# ========================
-# Env / Secrets
-# ========================
-.env
-.env.*
-*.env
-secrets.json
-config.local.*
+---
+---
 
-# ========================
-# Node / Frontend
-# ========================
-node_modules/
-dist/
-build/
-coverage/
-.npm/
-.cache/
-.next/
-out/
+## 🚀 Getting Started
 
-# ========================
-# Java
-# ========================
-target/
-*.class
-*.jar
-*.war
-*.ear
-.gradle/
-build/
+### Prerequisites
 
-# ========================
-# Python
-# ========================
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-venv/
-env/
-ENV/
-pip-wheel-metadata/
-*.egg-info/
-dist/
-build/
+Make sure you have the following installed:
 
-# ========================
-# Testing
-# ========================
-coverage/
-htmlcov/
-.junit/
-test-output/
+- Git
+- VS Code (recommended)
+- Language runtime (Java / Python / Node depending on project)
+- Package manager (Maven / Gradle / pip / npm)
 
-# ========================
-# Docker
-# ========================
-.docker/
-docker-compose.override.yml
+---
 
-# ========================
-# Terraform
-# ========================
-.terraform/
-*.tfstate
-*.tfstate.*
-crash.log
+### Clone the Repository
