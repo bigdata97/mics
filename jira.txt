@@ -1,23 +1,114 @@
-## 📘 Overview
+name: Repository Provisioning
 
-This repository contains the source code and related assets for the **__SERVICE_NAME__** application.
+on:
+  workflow_dispatch:
+    inputs:
+      repo_name:
+        description: "Repository Name"
+        required: true
 
-The repository has been created using the organization’s **standard repository template** to ensure consistent structure, governance, and development practices across all projects.
+      repo_description:
+        description: "Repository Description"
+        required: true
 
----
----
+      visibility:
+        description: "private or public"
+        required: true
+        default: "private"
 
-## 🚀 Getting Started
+      admin_teams:
+        description: "Comma separated team slugs"
+        required: true
 
-### Prerequisites
+      create_develop_branch:
+        description: "Create develop branch"
+        required: false
+        default: "true"
 
-Make sure you have the following installed:
+jobs:
+  provision:
+    runs-on: ubuntu-latest
 
-- Git
-- VS Code (recommended)
-- Language runtime (Java / Python / Node depending on project)
-- Package manager (Maven / Gradle / pip / npm)
+    steps:
 
----
+      - name: Checkout Platform Repo
+        uses: actions/checkout@v4
 
-### Clone the Repository
+      - name: Create Repository From Template
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+        run: |
+          gh api \
+            --method POST \
+            repos/YOUR_ORG/repo-template-standard/generate \
+            -f owner=YOUR_ORG \
+            -f name="${{ github.event.inputs.repo_name }}" \
+            -f description="${{ github.event.inputs.repo_description }}" \
+            -f private=${{ github.event.inputs.visibility == 'private' }}
+
+      - name: Wait for Repo Creation
+        run: sleep 10
+
+      - name: Get Default Branch SHA
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+        run: |
+          SHA=$(gh api repos/YOUR_ORG/${{ github.event.inputs.repo_name }} \
+            --jq '.default_branch')
+
+          echo "DEFAULT_BRANCH=$SHA" >> $GITHUB_ENV
+
+      - name: Create Develop Branch
+        if: ${{ github.event.inputs.create_develop_branch == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+        run: |
+          BASE_SHA=$(gh api repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/git/ref/heads/main --jq '.object.sha')
+
+          gh api \
+            --method POST \
+            repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/git/refs \
+            -f ref="refs/heads/develop" \
+            -f sha="$BASE_SHA"
+
+      - name: Assign Admin Teams
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+        run: |
+          IFS=',' read -ra TEAMS <<< "${{ github.event.inputs.admin_teams }}"
+
+          for TEAM in "${TEAMS[@]}"; do
+            gh api \
+              --method PUT \
+              orgs/YOUR_ORG/teams/$TEAM/repos/YOUR_ORG/${{ github.event.inputs.repo_name }} \
+              -f permission=admin
+          done
+
+      - name: Create Labels
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+        run: |
+          gh label create bug \
+            --repo YOUR_ORG/${{ github.event.inputs.repo_name }} \
+            --color d73a4a \
+            --description "Something is not working" || true
+
+          gh label create enhancement \
+            --repo YOUR_ORG/${{ github.event.inputs.repo_name }} \
+            --color a2eeef \
+            --description "Feature request" || true
+
+      - name: Apply Branch Protection
+        env:
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+        run: |
+          gh api \
+            --method PUT \
+            repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/branches/main/protection \
+            -f required_pull_request_reviews.required_approving_review_count=2 \
+            -f enforce_admins=true \
+            -f required_status_checks.strict=true
+
+      - name: Summary
+        run: |
+          echo "Repository created successfully: ${{ github.event.inputs.repo_name }}" >> $GITHUB_STEP_SUMMARY
