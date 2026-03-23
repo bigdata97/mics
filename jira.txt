@@ -1,21 +1,96 @@
-name: CI Pipeline
+# ========================
+# OS Files
+# ========================
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
 
-on:
-  pull_request:
-  push:
-    branches:
-      - main
+# ========================
+# VS Code
+# ========================
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
+# ========================
+# Logs / Temp
+# ========================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
 
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+# ========================
+# Env / Secrets
+# ========================
+.env
+.env.*
+*.env
+secrets.json
+config.local.*
 
-      - name: Run Build
-        run: echo "Build step placeholder"
+# ========================
+# Node / Frontend
+# ========================
+node_modules/
+dist/
+build/
+coverage/
+.npm/
+.cache/
+.next/
+out/
 
-      - name: Run Tests
-        run: echo "Test step placeholder"
+# ========================
+# Java
+# ========================
+target/
+*.class
+*.jar
+*.war
+*.ear
+.gradle/
+build/
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+env/
+ENV/
+pip-wheel-metadata/
+*.egg-info/
+dist/
+build/
+
+# ========================
+# Testing
+# ========================
+coverage/
+htmlcov/
+.junit/
+test-output/
+
+# ========================
+# Docker
+# ========================
+.docker/
+docker-compose.override.yml
+
+# ========================
+# Terraform
+# ========================
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
