@@ -1,19 +1,13 @@
-- name: Assign Teams
-  env:
-    GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-  run: |
-    IFS=',' read -ra TEAM_PERMS <<< "${{ github.event.inputs.team_permissions }}"
-    for ENTRY in "${TEAM_PERMS[@]}"; do
-      TEAM=$(echo $ENTRY | cut -d':' -f1)
-      ROLE=$(echo $ENTRY | cut -d':' -f2)
-
-      echo "Assigning $TEAM with role $ROLE"
-
-      gh api \
-        --method PUT \
-        orgs/YOUR_ORG/teams/$TEAM/repos/YOUR_ORG/${{ github.event.inputs.repo_name }} \
-        -f permission=$ROLE
-    done
+- name: Debug token presence
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "GH_TOKEN is empty"
+            exit 1
+          else
+            echo "GH_TOKEN is present"
+          fi
 
 
 ⭐ ENTERPRISE REPO PROVISIONING — DESIGN OVERVIEW
