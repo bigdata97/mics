@@ -1,22 +1,17 @@
-- name: Set Repo Visibility to Internal
+- name: Assign Users With Roles
   env:
     GH_TOKEN: ${{ steps.generate-token.outputs.token }}
   run: |
-    for i in {1..20}; do
-      echo "Attempt $i to set visibility"
+    IFS=',' read -ra USER_PERMS <<< "${{ github.event.inputs.user_permissions }}"
 
-      if gh api \
-        --method PATCH \
-        repos/cvs-health-source-code/${{ github.event.inputs.repo_name }} \
-        -f visibility=internal; then
+    for ENTRY in "${USER_PERMS[@]}"; do
+      USER=$(echo $ENTRY | cut -d':' -f1)
+      PERM=$(echo $ENTRY | cut -d':' -f2)
 
-        echo "Visibility updated"
-        exit 0
-      fi
+      echo "Adding $USER with $PERM"
 
-      echo "Still provisioning… waiting"
-      sleep 5
+      gh api \
+        --method PUT \
+        repos/cvs-health-source-code/${{ github.event.inputs.repo_name }}/collaborators/$USER \
+        -f permission=$PERM
     done
-
-    echo "Failed to update visibility after retries"
-    exit 1
