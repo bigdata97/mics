@@ -1,114 +1,201 @@
+⭐ ENTERPRISE REPO PROVISIONING — DESIGN OVERVIEW
+
+Provisioning should configure:
+
+Repo Creation Layer
+template
+visibility
+merge strategies
+delete branch on merge
+include all branches
+Governance Layer
+Rulesets (VERY IMPORTANT — modern branch protection)
+CODEOWNERS enforcement
+required checks
+PR approvals
+Collaboration Layer
+Teams
+Topics
+Labels
+Wiki / Issues
+Security Layer
+Dependabot
+Secret scanning
+Actions permissions
+Environments
+DevOps Layer
+Variables
+Secrets
+Webhooks
+Default branch rename
+Develop branch creation
+
+
+
+gh api \
+  --method POST \
+  repos/YOUR_ORG/repo-template-standard/generate \
+  -f owner=YOUR_ORG \
+  -f name="${{ github.event.inputs.repo_name }}" \
+  -f description="${{ github.event.inputs.repo_description }}" \
+  -f visibility=${{ github.event.inputs.visibility }} \
+  -f include_all_branches=true \
+  -f allow_auto_merge=true \
+  -f allow_merge_commit=false \
+  -f allow_rebase_merge=false \
+  -f allow_squash_merge=true \
+  -f delete_branch_on_merge=true \
+  -f has_issues=true \
+  -f has_projects=false \
+  -f has_wiki=false
+
+
+
 name: Repository Provisioning
 
 on:
-  workflow_dispatch:
-    inputs:
-      repo_name:
-        description: "Repository Name"
-        required: true
-
-      repo_description:
-        description: "Repository Description"
-        required: true
-
-      visibility:
-        description: "private or public"
-        required: true
-        default: "private"
-
-      admin_teams:
-        description: "Comma separated team slugs"
-        required: true
-
-      create_develop_branch:
-        description: "Create develop branch"
-        required: false
-        default: "true"
+workflow_dispatch:
+inputs:
+repo_name:
+required: true
+description:
+required: true
+visibility:
+required: true
+default: private
+admin_teams:
+required: true
+topics:
+required: false
+create_develop:
+required: false
+default: true
 
 jobs:
-  provision:
-    runs-on: ubuntu-latest
+provision:
+runs-on: ubuntu-latest
 
-    steps:
+```
+steps:
 
-      - name: Checkout Platform Repo
-        uses: actions/checkout@v4
+  - uses: actions/checkout@v4
 
-      - name: Create Repository From Template
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-        run: |
-          gh api \
-            --method POST \
-            repos/YOUR_ORG/repo-template-standard/generate \
-            -f owner=YOUR_ORG \
-            -f name="${{ github.event.inputs.repo_name }}" \
-            -f description="${{ github.event.inputs.repo_description }}" \
-            -f private=${{ github.event.inputs.visibility == 'private' }}
+  - name: Create Repo From Template
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method POST \
+        repos/YOUR_ORG/repo-template-standard/generate \
+        -f owner=YOUR_ORG \
+        -f name="${{ github.event.inputs.repo_name }}" \
+        -f description="${{ github.event.inputs.description }}" \
+        -f visibility=${{ github.event.inputs.visibility }} \
+        -f include_all_branches=true \
+        -f allow_auto_merge=true \
+        -f allow_merge_commit=false \
+        -f allow_rebase_merge=false \
+        -f allow_squash_merge=true \
+        -f delete_branch_on_merge=true
 
-      - name: Wait for Repo Creation
-        run: sleep 10
+  - name: Wait Repo
+    run: sleep 8
 
-      - name: Get Default Branch SHA
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-        run: |
-          SHA=$(gh api repos/YOUR_ORG/${{ github.event.inputs.repo_name }} \
-            --jq '.default_branch')
+  - name: Assign Teams
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      IFS=',' read -ra TEAMS <<< "${{ github.event.inputs.admin_teams }}"
+      for TEAM in "${TEAMS[@]}"; do
+        gh api \
+          --method PUT \
+          orgs/YOUR_ORG/teams/$TEAM/repos/YOUR_ORG/${{ github.event.inputs.repo_name }} \
+          -f permission=admin
+      done
 
-          echo "DEFAULT_BRANCH=$SHA" >> $GITHUB_ENV
+  - name: Apply Topics
+    if: ${{ github.event.inputs.topics != '' }}
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method PUT \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/topics \
+        -f names[]=${{ github.event.inputs.topics }}
 
-      - name: Create Develop Branch
-        if: ${{ github.event.inputs.create_develop_branch == 'true' }}
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-        run: |
-          BASE_SHA=$(gh api repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/git/ref/heads/main --jq '.object.sha')
+  - name: Create Develop Branch
+    if: ${{ github.event.inputs.create_develop == 'true' }}
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      SHA=$(gh api repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/git/ref/heads/main --jq '.object.sha')
 
-          gh api \
-            --method POST \
-            repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/git/refs \
-            -f ref="refs/heads/develop" \
-            -f sha="$BASE_SHA"
+      gh api \
+        --method POST \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/git/refs \
+        -f ref="refs/heads/develop" \
+        -f sha="$SHA"
 
-      - name: Assign Admin Teams
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-        run: |
-          IFS=',' read -ra TEAMS <<< "${{ github.event.inputs.admin_teams }}"
+  - name: Create Environment
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method PUT \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/environments/dev
 
-          for TEAM in "${TEAMS[@]}"; do
-            gh api \
-              --method PUT \
-              orgs/YOUR_ORG/teams/$TEAM/repos/YOUR_ORG/${{ github.event.inputs.repo_name }} \
-              -f permission=admin
-          done
+  - name: Set Repo Variables
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method POST \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/actions/variables \
+        -f name=DEFAULT_REGION \
+        -f value=us-east1
 
-      - name: Create Labels
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-        run: |
-          gh label create bug \
-            --repo YOUR_ORG/${{ github.event.inputs.repo_name }} \
-            --color d73a4a \
-            --description "Something is not working" || true
+  - name: Enable Dependabot
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method PUT \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/automated-security-fixes
 
-          gh label create enhancement \
-            --repo YOUR_ORG/${{ github.event.inputs.repo_name }} \
-            --color a2eeef \
-            --description "Feature request" || true
+  - name: Set Actions Permission
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method PUT \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/actions/permissions \
+        -f enabled=true \
+        -f allowed_actions=selected
 
-      - name: Apply Branch Protection
-        env:
-          GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
-        run: |
-          gh api \
-            --method PUT \
-            repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/branches/main/protection \
-            -f required_pull_request_reviews.required_approving_review_count=2 \
-            -f enforce_admins=true \
-            -f required_status_checks.strict=true
+  - name: Import Ruleset
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method POST \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/rulesets \
+        --input .github/rulesets/main-ruleset.json
 
-      - name: Summary
-        run: |
-          echo "Repository created successfully: ${{ github.event.inputs.repo_name }}" >> $GITHUB_STEP_SUMMARY
+  - name: Create Webhook
+    env:
+      GH_TOKEN: ${{ secrets.ORG_ADMIN_TOKEN }}
+    run: |
+      gh api \
+        --method POST \
+        repos/YOUR_ORG/${{ github.event.inputs.repo_name }}/hooks \
+        -f config.url=https://your-ci-endpoint/webhook \
+        -f config.content_type=json \
+        -f events[]=push \
+        -f events[]=pull_request
+
+  - name: Summary
+    run: |
+      echo "Repo provisioned: ${{ github.event.inputs.repo_name }}" >> $GITHUB_STEP_SUMMARY
+```
+
+
