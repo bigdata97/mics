@@ -1,34 +1,94 @@
-- name: Create or Update Ruleset (Self Healing)
-  env:
-    GH_TOKEN: ${{ steps.app-token.outputs.token }}
-    REPO: ${{ github.event.inputs.repo_name }}
-  run: |
+update-manifest-pr:
+  needs: docker-push
+  if: github.ref_name == 'main' &&
+      (github.event.inputs.deployment-environment == 'dev' ||
+       github.event.inputs.deployment-environment == 'uat')
+  runs-on: self-hosted
 
-    RULESET_NAME="branch-protection-policies"
+  permissions:
+    contents: write
+    pull-requests: write
 
-    echo "Checking if ruleset already exists..."
+  steps:
 
-    RULESET_ID=$(gh api repos/cvs-health-source-code/$REPO/rulesets \
-      --jq '.[] | select(.name=="'"$RULESET_NAME"'") | .id')
+    # Always checkout latest main
+    - name: Checkout main
+      uses: actions/checkout@v4
+      with:
+        ref: main
+        fetch-depth: 0
 
-    echo "Ruleset ID found: $RULESET_ID"
+    - name: Sync with latest main
+      run: |
+        git fetch origin main
+        git reset --hard origin/main
 
-    if [ -z "$RULESET_ID" ]; then
+    - name: Set Variables
+      run: |
+        echo "IMAGE_TAG=${{ needs.docker-push.outputs.image_tag }}" >> $GITHUB_ENV
+        echo "BRANCH_NAME=update-image-${{ github.run_id }}-$(date +%s)" >> $GITHUB_ENV
 
-      echo "Ruleset not found → Creating"
+    # Select deployment file path
+    - name: Set deployment path
+      run: |
+        if [ "${{ github.event.inputs.deployment-environment }}" = "dev" ]; then
+          echo "DEPLOY_PATH=k8s-manifests/dev/deployment.yaml" >> $GITHUB_ENV
+        elif [ "${{ github.event.inputs.deployment-environment }}" = "uat" ]; then
+          echo "DEPLOY_PATH=k8s-manifests/uat/deployment.yaml" >> $GITHUB_ENV
+        fi
 
-      gh api \
-        --method POST \
-        repos/cvs-health-source-code/$REPO/rulesets \
-        --input .github/rulesets/main-ruleset.json
+    - name: Create new branch
+      run: |
+        git checkout -b $BRANCH_NAME
 
-    else
+    - name: Install yq
+      run: |
+        sudo wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
+        sudo chmod +x /usr/local/bin/yq
 
-      echo "Ruleset exists → Updating"
+    - name: Update image tag
+      run: |
+        yq -i '
+          .spec.template.spec.containers[0].image |=
+          sub(":.*$"; ":" + env(IMAGE_TAG))
+        ' $DEPLOY_PATH
 
-      gh api \
-        --method PUT \
-        repos/cvs-health-source-code/$REPO/rulesets/$RULESET_ID \
-        --input .github/rulesets/main-ruleset.json
+    - name: Check if changes exist
+      id: changes
+      run: |
+        if [[ -n "$(git status --porcelain)" ]]; then
+          echo "changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "changes=false" >> $GITHUB_OUTPUT
+        fi
 
-    fi
+    - name: Commit changes
+      if: steps.changes.outputs.changes == 'true'
+      run: |
+        git config user.name "github-actions"
+        git config user.email "github-actions@github.com"
+        git add $DEPLOY_PATH
+        git commit -m "Update image tag to ${IMAGE_TAG} for ${{ github.event.inputs.deployment-environment }}"
+
+    - name: Push branch
+      if: steps.changes.outputs.changes == 'true'
+      run: |
+        git push origin $BRANCH_NAME
+
+    - name: Create Pull Request
+      if: steps.changes.outputs.changes == 'true'
+      run: |
+        gh pr create \
+          --base main \
+          --head $BRANCH_NAME \
+          --title "Update image tag to ${IMAGE_TAG} (${{ github.event.inputs.deployment-environment }})" \
+          --body "Automated image update for ${{ github.event.inputs.deployment-environment }} environment."
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Enable Auto Merge
+      if: steps.changes.outputs.changes == 'true'
+      run: |
+        gh pr merge --auto --squash --delete-branch
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
