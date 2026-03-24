@@ -1,94 +1,235 @@
-update-manifest-pr:
-  needs: docker-push
-  if: github.ref_name == 'main' &&
-      (github.event.inputs.deployment-environment == 'dev' ||
-       github.event.inputs.deployment-environment == 'uat')
-  runs-on: self-hosted
+Good. Now let’s fix this properly and permanently.
 
-  permissions:
-    contents: write
-    pull-requests: write
+This is NOT a CI problem.
+This is a **package-lock + JFrog integrity mismatch problem**.
 
-  steps:
+Your error:
 
-    # Always checkout latest main
-    - name: Checkout main
-      uses: actions/checkout@v4
-      with:
-        ref: main
-        fetch-depth: 0
+```
+npm ERR! code EINTEGRITY
+npm ERR! integrity checksum failed
+wanted sha512-XXXX
+but got sha512-YYYY
+```
 
-    - name: Sync with latest main
-      run: |
-        git fetch origin main
-        git reset --hard origin/main
+That means:
 
-    - name: Set Variables
-      run: |
-        echo "IMAGE_TAG=${{ needs.docker-push.outputs.image_tag }}" >> $GITHUB_ENV
-        echo "BRANCH_NAME=update-image-${{ github.run_id }}-$(date +%s)" >> $GITHUB_ENV
+👉 The checksum stored in your `package-lock.json`
+👉 Does NOT match the actual axios tarball currently stored in JFrog
 
-    # Select deployment file path
-    - name: Set deployment path
-      run: |
-        if [ "${{ github.event.inputs.deployment-environment }}" = "dev" ]; then
-          echo "DEPLOY_PATH=k8s-manifests/dev/deployment.yaml" >> $GITHUB_ENV
-        elif [ "${{ github.event.inputs.deployment-environment }}" = "uat" ]; then
-          echo "DEPLOY_PATH=k8s-manifests/uat/deployment.yaml" >> $GITHUB_ENV
-        fi
+So npm refuses to install it.
 
-    - name: Create new branch
-      run: |
-        git checkout -b $BRANCH_NAME
+---
 
-    - name: Install yq
-      run: |
-        sudo wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq
-        sudo chmod +x /usr/local/bin/yq
+# 🔎 What Actually Happened
 
-    - name: Update image tag
-      run: |
-        yq -i '
-          .spec.template.spec.containers[0].image |=
-          sub(":.*$"; ":" + env(IMAGE_TAG))
-        ' $DEPLOY_PATH
+Earlier:
 
-    - name: Check if changes exist
-      id: changes
-      run: |
-        if [[ -n "$(git status --porcelain)" ]]; then
-          echo "changes=true" >> $GITHUB_OUTPUT
-        else
-          echo "changes=false" >> $GITHUB_OUTPUT
-        fi
+* JFrog had axios 1.13.2
+* Your lock file had checksum for 1.13.2
 
-    - name: Commit changes
-      if: steps.changes.outputs.changes == 'true'
-      run: |
-        git config user.name "github-actions"
-        git config user.email "github-actions@github.com"
-        git add $DEPLOY_PATH
-        git commit -m "Update image tag to ${IMAGE_TAG} for ${{ github.event.inputs.deployment-environment }}"
+Now:
 
-    - name: Push branch
-      if: steps.changes.outputs.changes == 'true'
-      run: |
-        git push origin $BRANCH_NAME
+* CI is trying to download axios 1.13.6
+* But JFrog’s tarball content is different from what lock file expects
+* So integrity fails
 
-    - name: Create Pull Request
-      if: steps.changes.outputs.changes == 'true'
-      run: |
-        gh pr create \
-          --base main \
-          --head $BRANCH_NAME \
-          --title "Update image tag to ${IMAGE_TAG} (${{ github.event.inputs.deployment-environment }})" \
-          --body "Automated image update for ${{ github.event.inputs.deployment-environment }} environment."
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+You manually edited line 5972.
+❌ That was wrong.
 
-    - name: Enable Auto Merge
-      if: steps.changes.outputs.changes == 'true'
-      run: |
-        gh pr merge --auto --squash --delete-branch
-      env:
-        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+You NEVER manually edit package-lock.json integrity.
+
+---
+
+# 🚨 IMPORTANT
+
+Integrity field is cryptographic hash.
+
+If tarball changes even 1 byte → checksum changes → npm fails.
+
+You cannot fix this manually.
+
+---
+
+# ✅ CORRECT FIX (Enterprise Safe)
+
+You MUST regenerate package-lock.json from a machine that can access JFrog correctly.
+
+Since you have a UI developer with local setup, follow these exact steps.
+
+---
+
+# 🛠 STEP-BY-STEP FIX (Give This To UI Developer)
+
+### 1️⃣ Delete lock and node_modules
+
+```bash
+rm -rf node_modules
+rm -f package-lock.json
+```
+
+---
+
+### 2️⃣ Clear npm cache
+
+Very important.
+
+```bash
+npm cache clean --force
+```
+
+---
+
+### 3️⃣ Verify npm registry
+
+Run:
+
+```bash
+npm config get registry
+```
+
+It must show your JFrog URL:
+
+```
+https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/
+```
+
+If not, check `.npmrc`.
+
+---
+
+### 4️⃣ Install Fresh
+
+```bash
+npm install
+```
+
+This will:
+
+* Download axios 1.13.6 from JFrog
+* Generate new integrity hash
+* Create fresh package-lock.json
+
+---
+
+### 5️⃣ Verify axios version
+
+Run:
+
+```bash
+npm list axios
+```
+
+Make sure it shows:
+
+```
+axios@1.13.6
+```
+
+---
+
+### 6️⃣ Commit New Lock File
+
+```bash
+git add package-lock.json
+git commit -m "Regenerate lock file with correct axios integrity"
+git push
+```
+
+---
+
+# ✅ That’s It
+
+CI will now:
+
+```
+npm ci
+```
+
+And integrity will match.
+
+Error gone.
+
+---
+
+# ⚠️ DO NOT EVER
+
+* Manually edit integrity field
+* Manually change resolved URL
+* Modify tarball link manually
+* Mix npm install and npm ci randomly
+
+---
+
+# 🧠 Why npm ci Failed
+
+Because `npm ci`:
+
+* Strictly uses package-lock.json
+* Does NOT modify lock file
+* Verifies integrity strictly
+
+That is correct behavior.
+
+---
+
+# 🔒 Prevent This In Future (Important)
+
+### Always:
+
+* Developer runs `npm install`
+* Commits updated package-lock.json
+* CI runs only `npm ci`
+
+Never modify lock file in CI.
+
+---
+
+# 🛡 Enterprise Hardening (Optional But Recommended)
+
+Add this in CI before npm ci:
+
+```yaml
+- name: Verify lock file integrity
+  run: |
+    if ! git diff --exit-code package-lock.json; then
+      echo "Lock file changed unexpectedly"
+      exit 1
+    fi
+```
+
+---
+
+# 🎯 Root Cause Summary
+
+Your JFrog tarball for axios changed.
+Your lock file still had old checksum.
+Integrity mismatch.
+npm stopped install.
+
+Correct behavior.
+
+---
+
+# 💡 Final Advice
+
+If this still fails after regeneration:
+
+Then your JFrog repo might be caching corrupted tarball.
+
+In that case:
+
+* Ask Artifactory admin to delete axios 1.13.6
+* Re-upload or re-sync
+
+But 99% of time regeneration fixes it.
+
+---
+
+If you want, I can now explain:
+
+* Why caret (^) caused version shift
+* Why 1.13.6 is selected
+* Or how to fully pin axios forever
+
+Tell me.
