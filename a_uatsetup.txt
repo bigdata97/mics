@@ -1,235 +1,320 @@
-Good. Now let’s fix this properly and permanently.
+Perfect — splitting this into two clear, independent stories is the right approach.
+Below are **two ready-to-paste Jira story descriptions** with **no ambiguity**, especially for a new team member.
 
-This is NOT a CI problem.
-This is a **package-lock + JFrog integrity mismatch problem**.
+---
 
-Your error:
+# 🟦 **STORY 1**
+
+## 🧾 **Title**
+
+Create Central Repository for Standardized Dependency Versions (Single Source of Truth)
+
+---
+
+## 🎯 **Objective**
+
+Establish a **central repository** that maintains a **standardized list of approved (vulnerability-free) dependency versions** to be used across all service repositories.
+
+This repository will act as the **single source of truth** for dependency versions and will help ensure consistency and reduce repeated vulnerability fixes across multiple repos.
+
+---
+
+## 🧩 **Problem Statement**
+
+Currently, we have **20+ service repositories**, each maintaining its own dependency versions. This leads to:
+
+* Inconsistent versions across repositories
+* Repeated vulnerability issues for the same libraries
+* Manual effort to fix the same issue in multiple repos
+* No centralized visibility of approved versions
+
+---
+
+## 🧠 **Solution Approach**
+
+Create a central repository that:
+
+* Stores standardized dependency versions
+* Tracks approved (vulnerability-free) versions
+* Can be referenced by other tools/scripts (future stories)
+
+---
+
+## 📦 **Repository Details**
+
+**Suggested Name:**
 
 ```
-npm ERR! code EINTEGRITY
-npm ERR! integrity checksum failed
-wanted sha512-XXXX
-but got sha512-YYYY
-```
-
-That means:
-
-👉 The checksum stored in your `package-lock.json`
-👉 Does NOT match the actual axios tarball currently stored in JFrog
-
-So npm refuses to install it.
-
----
-
-# 🔎 What Actually Happened
-
-Earlier:
-
-* JFrog had axios 1.13.2
-* Your lock file had checksum for 1.13.2
-
-Now:
-
-* CI is trying to download axios 1.13.6
-* But JFrog’s tarball content is different from what lock file expects
-* So integrity fails
-
-You manually edited line 5972.
-❌ That was wrong.
-
-You NEVER manually edit package-lock.json integrity.
-
----
-
-# 🚨 IMPORTANT
-
-Integrity field is cryptographic hash.
-
-If tarball changes even 1 byte → checksum changes → npm fails.
-
-You cannot fix this manually.
-
----
-
-# ✅ CORRECT FIX (Enterprise Safe)
-
-You MUST regenerate package-lock.json from a machine that can access JFrog correctly.
-
-Since you have a UI developer with local setup, follow these exact steps.
-
----
-
-# 🛠 STEP-BY-STEP FIX (Give This To UI Developer)
-
-### 1️⃣ Delete lock and node_modules
-
-```bash
-rm -rf node_modules
-rm -f package-lock.json
+platform-dependency-management
 ```
 
 ---
 
-### 2️⃣ Clear npm cache
+## 📁 **Repository Structure**
 
-Very important.
+Example structure:
 
-```bash
-npm cache clean --force
+```
+platform-dependency-management/
+  ├── README.md
+  ├── dependencies.yaml
 ```
 
 ---
 
-### 3️⃣ Verify npm registry
+## 📄 **Dependency File Format**
 
-Run:
-
-```bash
-npm config get registry
-```
-
-It must show your JFrog URL:
-
-```
-https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/
-```
-
-If not, check `.npmrc`.
-
----
-
-### 4️⃣ Install Fresh
-
-```bash
-npm install
-```
-
-This will:
-
-* Download axios 1.13.6 from JFrog
-* Generate new integrity hash
-* Create fresh package-lock.json
-
----
-
-### 5️⃣ Verify axios version
-
-Run:
-
-```bash
-npm list axios
-```
-
-Make sure it shows:
-
-```
-axios@1.13.6
-```
-
----
-
-### 6️⃣ Commit New Lock File
-
-```bash
-git add package-lock.json
-git commit -m "Regenerate lock file with correct axios integrity"
-git push
-```
-
----
-
-# ✅ That’s It
-
-CI will now:
-
-```
-npm ci
-```
-
-And integrity will match.
-
-Error gone.
-
----
-
-# ⚠️ DO NOT EVER
-
-* Manually edit integrity field
-* Manually change resolved URL
-* Modify tarball link manually
-* Mix npm install and npm ci randomly
-
----
-
-# 🧠 Why npm ci Failed
-
-Because `npm ci`:
-
-* Strictly uses package-lock.json
-* Does NOT modify lock file
-* Verifies integrity strictly
-
-That is correct behavior.
-
----
-
-# 🔒 Prevent This In Future (Important)
-
-### Always:
-
-* Developer runs `npm install`
-* Commits updated package-lock.json
-* CI runs only `npm ci`
-
-Never modify lock file in CI.
-
----
-
-# 🛡 Enterprise Hardening (Optional But Recommended)
-
-Add this in CI before npm ci:
+Define a structured file (YAML preferred):
 
 ```yaml
-- name: Verify lock file integrity
-  run: |
-    if ! git diff --exit-code package-lock.json; then
-      echo "Lock file changed unexpectedly"
-      exit 1
-    fi
+dependencies:
+  spring-boot: 3.2.5
+  log4j: 2.21.1
+  jackson: 2.15.3
+  lodash: 4.17.21
 ```
 
 ---
 
-# 🎯 Root Cause Summary
+## 📋 **Detailed Tasks**
 
-Your JFrog tarball for axios changed.
-Your lock file still had old checksum.
-Integrity mismatch.
-npm stopped install.
+### 🔹 Step 1: Create Repository
 
-Correct behavior.
-
----
-
-# 💡 Final Advice
-
-If this still fails after regeneration:
-
-Then your JFrog repo might be caching corrupted tarball.
-
-In that case:
-
-* Ask Artifactory admin to delete axios 1.13.6
-* Re-upload or re-sync
-
-But 99% of time regeneration fixes it.
+* Create repo under organization
+* Set appropriate visibility (private)
+* Add initial README
 
 ---
 
-If you want, I can now explain:
+### 🔹 Step 2: Define Dependency File
 
-* Why caret (^) caused version shift
-* Why 1.13.6 is selected
-* Or how to fully pin axios forever
+* Create `dependencies.yaml`
+* Define structure for dependencies
+* Add initial set of commonly used libraries
 
-Tell me.
+---
+
+### 🔹 Step 3: Identify Common Dependencies
+
+* Review 3–5 existing service repos
+* Extract commonly used dependencies
+* Add them to central file
+
+---
+
+### 🔹 Step 4: Documentation
+
+Update README with:
+
+* Purpose of repo
+* How to update dependencies
+* Guidelines for adding new libraries
+
+---
+
+## ✅ **Acceptance Criteria**
+
+* [ ] Central repository is created
+* [ ] `dependencies.yaml` file is added
+* [ ] At least 5 common dependencies are listed
+* [ ] Structure is clear and consistent
+* [ ] README explains purpose and usage
+* [ ] Repo is accessible to team
+
+---
+
+## 🏁 **Definition of Done**
+
+* Repository is created and shared with team
+* Dependency file is finalized and reviewed
+* Initial dependencies are validated against existing repos
+* Documentation is complete and understandable by a new team member
+
+---
+
+## ⚠️ **Important Notes**
+
+* Only include **approved and verified versions**
+* Avoid adding unused dependencies
+* Keep structure simple and extensible
+
+---
+
+---
+
+# 🟩 **STORY 2**
+
+## 🧾 **Title**
+
+Build Script to Scan Repositories and Report Dependency Version Mismatches
+
+---
+
+## 🎯 **Objective**
+
+Develop a script that scans all service repositories, compares their dependency versions against the central repository, and generates a report highlighting mismatches.
+
+---
+
+## 🧩 **Problem Statement**
+
+Even after defining standardized versions (Story 1), we currently have:
+
+* No visibility into which repos are outdated
+* No automated way to identify mismatches
+* Manual effort required to check each repo
+
+---
+
+## 🧠 **Solution Approach**
+
+Create a script that:
+
+* Reads standardized versions from central repo
+* Scans each service repository
+* Compares dependency versions
+* Generates a report showing:
+
+  * Matching versions
+  * Outdated versions
+  * Missing dependencies
+
+---
+
+## 🔗 **Dependencies**
+
+* Requires completion of **Story 1 (central repo + dependency file)**
+
+---
+
+## 📋 **Detailed Tasks**
+
+### 🔹 Step 1: Identify Target Repositories
+
+* Prepare list of all service repos (~20+)
+* Store repo names in config file or script
+
+---
+
+### 🔹 Step 2: Script Setup
+
+* Choose language (Python preferred)
+* Set up basic project structure
+
+---
+
+### 🔹 Step 3: Read Central Dependency File
+
+* Parse `dependencies.yaml`
+* Store standardized versions in memory
+
+---
+
+### 🔹 Step 4: Repository Scanning Logic
+
+For each repo:
+
+* Clone or pull latest code
+* Detect project type:
+
+  * Maven → `pom.xml`
+  * Node → `package.json`
+* Extract dependency versions
+
+---
+
+### 🔹 Step 5: Comparison Logic
+
+* Compare repo version vs central version
+* Categorize:
+
+  * Match
+  * Outdated
+  * Not present
+
+---
+
+### 🔹 Step 6: Report Generation
+
+Generate output in readable format:
+
+Example:
+
+```
+Repo: service-A
+  spring-boot → Outdated (3.1.0 → 3.2.5)
+  log4j → Match
+  jackson → Missing
+```
+
+Optional formats:
+
+* Console output
+* CSV file
+* JSON report
+
+---
+
+### 🔹 Step 7: Testing
+
+* Run script on 2–3 repos
+* Validate accuracy of report
+
+---
+
+### 🔹 Step 8: Documentation
+
+* Add README for script usage
+* Include:
+
+  * How to run
+  * Input requirements
+  * Sample output
+
+---
+
+## ✅ **Acceptance Criteria**
+
+* [ ] Script reads dependency file from central repo
+* [ ] Script scans at least one repository successfully
+* [ ] Dependency comparison works correctly
+* [ ] Report clearly shows mismatches
+* [ ] Tested on minimum 2 repositories
+* [ ] Documentation is available
+
+---
+
+## 🏁 **Definition of Done**
+
+* Script runs end-to-end without errors
+* Accurate mismatch report is generated
+* Works for at least one project type (Maven or Node)
+* Code is readable and maintainable
+* README explains execution steps clearly
+
+---
+
+## ⚠️ **Important Notes**
+
+* Do NOT modify repositories in this story (read-only scan only)
+* Handle different project types carefully
+* Ensure script can be extended in future (for auto-fix)
+* Avoid hardcoding repo-specific values
+
+---
+
+## 🚀 **Future Scope**
+
+* Auto-fix dependency versions
+* Create PRs automatically
+* Integrate with CI/CD pipelines
+* Schedule periodic scans
+
+---
+
+If you want next step, I can give you:
+✅ Ready-to-use **Python script for Story 2**
+✅ Repo structure + **starter code**
+✅ GitHub Actions automation for future
+
+Just tell 👍
