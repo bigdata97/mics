@@ -1,35 +1,77 @@
-# Base image with Node 22
-FROM node:22.21.1-alpine
+Story 2: Setup Centralized Logging & Correlation
 
-# Set working directory
-WORKDIR /app
+Title:
+Enabler - Standardize structured logging and trace correlation across services
 
-# Build args
-ARG VITE_APP_ENV
-ARG JFROG_READER_TOKEN
+Scope:
 
-# Set env
-ENV VITE_APP_ENV=$VITE_APP_ENV
+JSON logging format
+Correlation ID propagation
+Link logs ↔ traces
 
-# Copy only package files first (better caching)
-COPY package*.json ./
 
-# Copy .npmrc (for registry + configs only, no token)
-COPY .npmrc ./
 
-# Install dependencies securely
-RUN echo "//cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/:_authToken=${JFROG_READER_TOKEN}" >> /root/.npmrc \
-    && npm install \
-    && rm -f /root/.npmrc
+Story 4: Automate Docker Tag → Deployment (your idea but formalized)
 
-# Copy remaining source code
-COPY . .
+Title:
+Enabler - Automate Docker image tag update in deployment manifests post CI build
 
-# Build project
-RUN npm run build
 
-# Expose port
-EXPOSE 8080
+Story 6: CI Pipeline Performance Optimization
 
-# Start app
-CMD ["npm", "run", "preview", "--", "--port", "8080", "--host", "0.0.0.0"]
+Title:
+Enabler - Optimize GitHub Actions pipeline execution time and caching
+
+
+Story 7: Centralized Dependency Management (your story split)
+
+Already you created:
+
+Central repo
+Script
+
+👉 Add next step:
+
+Title:
+Enabler - Enforce standardized dependency versions across all repositories
+
+
+Story 8: Secrets Standardization via Vault
+
+Title:
+Enabler - Standardize secrets management using HashiCorp Vault across services
+
+👉 You already have Vault integration → now enforce usage
+
+
+
+
+
+
+Story 12: Disaster Recovery Strategy
+
+Title:
+Spike - Define disaster recovery and rollback strategy for MICS platform
+
+
+
+
+Story 18: GitOps Standardization Across Environments
+
+Title:
+Enabler - Standardize ArgoCD GitOps structure across DEV, QA, UAT, PROD
+
+
+
+Story 19: Release Strategy Standardization
+
+Title:
+Enabler - Define and implement release strategy (branching, tagging, promotion)
+
+
+
+
+
+
+
+
