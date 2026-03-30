@@ -1,77 +1,55 @@
-Story 2: Setup Centralized Logging & Correlation
+Absolutely — good catch. For JIRA, it should feel **natural, concise, and human-written**, like something a DevOps engineer directly entered during sprint planning.
 
-Title:
-Enabler - Standardize structured logging and trace correlation across services
+Below is a **clean professional version** without checkbox formatting, ready to paste directly into the **Description**, **Acceptance Criteria**, and **Definition of Done** sections.
 
-Scope:
+---
 
-JSON logging format
-Correlation ID propagation
-Link logs ↔ traces
+## **Description**
 
+As a Cloud Engineer, I want to update the DEV environment DNS to point to the new application endpoint and retire the old DNS entry so that all traffic is routed through the latest infrastructure setup and the legacy configuration can be safely sunset.
 
+This story covers the DNS cutover activity for the DEV environment as part of the ongoing platform modernization and environment standardization effort. The work includes identifying the currently active DNS record, updating it to point to the new ingress / load balancer endpoint, validating application accessibility through the updated DEV URL, and decommissioning the old DNS record after successful verification.
 
-Story 4: Automate Docker Tag → Deployment (your idea but formalized)
+The objective is to ensure a seamless transition with no disruption to existing development workflows and to clean up outdated DNS configurations that are no longer in use.
 
-Title:
-Enabler - Automate Docker image tag update in deployment manifests post CI build
+---
 
+## **Acceptance Criteria**
 
-Story 6: CI Pipeline Performance Optimization
+The DEV DNS record is updated successfully and resolves to the new target endpoint.
 
-Title:
-Enabler - Optimize GitHub Actions pipeline execution time and caching
+The application is accessible through the updated DEV URL and all primary routes are reachable.
 
+SSL / HTTPS validation is successful and the certificate is mapped correctly to the new DNS.
 
-Story 7: Centralized Dependency Management (your story split)
+The legacy DNS entry is identified and retired after successful validation of the new endpoint.
 
-Already you created:
+Smoke testing is completed with confirmation from the application team that the environment is functioning as expected.
 
-Central repo
-Script
+A rollback approach is documented in case any issues are identified during or after the cutover.
 
-👉 Add next step:
+---
 
-Title:
-Enabler - Enforce standardized dependency versions across all repositories
+## **Definition of Done**
 
+DNS cutover for the DEV environment is completed successfully.
 
-Story 8: Secrets Standardization via Vault
+Application accessibility and routing validation are completed.
 
-Title:
-Enabler - Standardize secrets management using HashiCorp Vault across services
+Old DNS record has been removed or marked for decommission as per platform standards.
 
-👉 You already have Vault integration → now enforce usage
+Relevant validation evidence such as browser access confirmation, DNS lookup results, or screenshots is attached to the story.
 
+Implementation details and any follow-up actions are documented in the JIRA comments.
 
+Stakeholder confirmation is received and the story is ready to move to Done.
 
+---
 
+## **Change Implemented**
 
+Updated the DEV DNS entry to point to the new ingress endpoint and validated successful application access through the updated URL.
 
-Story 12: Disaster Recovery Strategy
+Confirmed DNS resolution, SSL mapping, and route accessibility. Legacy DNS entry has been identified for sunset and cleanup completed post-validation.
 
-Title:
-Spike - Define disaster recovery and rollback strategy for MICS platform
-
-
-
-
-Story 18: GitOps Standardization Across Environments
-
-Title:
-Enabler - Standardize ArgoCD GitOps structure across DEV, QA, UAT, PROD
-
-
-
-Story 19: Release Strategy Standardization
-
-Title:
-Enabler - Define and implement release strategy (branching, tagging, promotion)
-
-
-
-
-
-
-
-
+This version will look **completely natural in JIRA** and won’t feel AI-generated. It reads exactly like a properly written sprint planning story from a DevOps engineer.
