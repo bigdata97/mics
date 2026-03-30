@@ -1,55 +1,83 @@
-Absolutely — good catch. For JIRA, it should feel **natural, concise, and human-written**, like something a DevOps engineer directly entered during sprint planning.
+Perfect — this is a **strong production release / DevOps enablement story**, and because it touches **UI deployment + authentication + data readiness + Zero Trust**, it should be written clearly so it looks like a real release story and not too “AI polished.”
 
-Below is a **clean professional version** without checkbox formatting, ready to paste directly into the **Description**, **Acceptance Criteria**, and **Definition of Done** sections.
+Below is a **natural JIRA-ready version** you can directly paste.
 
 ---
 
 ## **Description**
 
-As a Cloud Engineer, I want to update the DEV environment DNS to point to the new application endpoint and retire the old DNS entry so that all traffic is routed through the latest infrastructure setup and the legacy configuration can be safely sunset.
+This story covers the production deployment of the `mics-ui-components` repository along with the dependent `logos` and `login` repositories to complete the end-to-end PROD release flow.
 
-This story covers the DNS cutover activity for the DEV environment as part of the ongoing platform modernization and environment standardization effort. The work includes identifying the currently active DNS record, updating it to point to the new ingress / load balancer endpoint, validating application accessibility through the updated DEV URL, and decommissioning the old DNS record after successful verification.
+As part of this deployment, all application dependencies required for successful PROD access and functionality need to be configured. This includes setting up the `MICS-PROD` client in Ping, enabling Zero Trust access, updating the refresh interval configuration to 60 seconds, and ensuring the required data is created or migrated in MongoDB to support the logo service and associated UI functionality.
 
-The objective is to ensure a seamless transition with no disruption to existing development workflows and to clean up outdated DNS configurations that are no longer in use.
+The objective of this story is to make the PROD environment fully functional from both infrastructure and application access perspectives, ensuring login, branding, and UI rendering work seamlessly after deployment.
 
 ---
 
 ## **Acceptance Criteria**
 
-The DEV DNS record is updated successfully and resolves to the new target endpoint.
+The `mics-ui-components` repository is deployed successfully to the PROD environment.
 
-The application is accessible through the updated DEV URL and all primary routes are reachable.
+Dependent repositories `logos` and `login` are also deployed successfully as part of the same release cycle.
 
-SSL / HTTPS validation is successful and the certificate is mapped correctly to the new DNS.
+`MICS-PROD` client is created and configured in Ping with the required redirect URIs, client settings, and access policies.
 
-The legacy DNS entry is identified and retired after successful validation of the new endpoint.
+Zero Trust access is enabled and validated for PROD users.
 
-Smoke testing is completed with confirmation from the application team that the environment is functioning as expected.
+Application refresh interval is updated to 60 seconds and verified post deployment.
 
-A rollback approach is documented in case any issues are identified during or after the cutover.
+Required MongoDB data is created or migrated successfully to support the logo service and UI rendering.
+
+Login flow, logo rendering, and UI component loading are validated successfully in PROD.
+
+Smoke testing is completed and stakeholder confirmation is received.
 
 ---
 
 ## **Definition of Done**
 
-DNS cutover for the DEV environment is completed successfully.
+All three repositories are successfully deployed to PROD.
 
-Application accessibility and routing validation are completed.
+Ping client configuration is completed and validated.
 
-Old DNS record has been removed or marked for decommission as per platform standards.
+Zero Trust and authentication flows are working as expected.
 
-Relevant validation evidence such as browser access confirmation, DNS lookup results, or screenshots is attached to the story.
+MongoDB data setup is completed and verified.
 
-Implementation details and any follow-up actions are documented in the JIRA comments.
+Post-deployment smoke testing is successful with no major issues.
 
-Stakeholder confirmation is received and the story is ready to move to Done.
+Deployment evidence, validation screenshots, and implementation notes are added to the story.
+
+The PROD environment is ready for business / user validation.
 
 ---
 
 ## **Change Implemented**
 
-Updated the DEV DNS entry to point to the new ingress endpoint and validated successful application access through the updated URL.
+Deployed `mics-ui-components`, `logos`, and `login` repositories to PROD.
 
-Confirmed DNS resolution, SSL mapping, and route accessibility. Legacy DNS entry has been identified for sunset and cleanup completed post-validation.
+Configured `MICS-PROD` client in Ping, enabled Zero Trust access, updated refresh interval to 60 seconds, and completed MongoDB data setup required for logo service functionality.
 
-This version will look **completely natural in JIRA** and won’t feel AI-generated. It reads exactly like a properly written sprint planning story from a DevOps engineer.
+Validated login flow, UI rendering, and logo service response successfully in PROD.
+
+---
+
+## **Suggested Subtasks**
+
+Deploy mics-ui-components to PROD
+
+Deploy logos service to PROD
+
+Deploy login service to PROD
+
+Create and configure MICS-PROD client in Ping
+
+Enable Zero Trust access
+
+Update refresh interval to 60 seconds
+
+Create / migrate MongoDB data for logo service
+
+Perform end-to-end smoke validation
+
+This will look **very realistic in JIRA for release planning / Q2 approval** and matches how DevOps teams usually write PROD deployment stories.
