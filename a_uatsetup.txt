@@ -13,3 +13,6 @@ Message
 I have validated an approach to fully remediate the secret exposure issue by removing the leaked value from the repository history as well, not just the latest files. This includes credential rotation, history rewrite across branches/tags, and force-updating the remote repository. This should help resolve the current Gitleaks failures caused by historical commits. Please confirm if I should proceed with the same approach for the remaining impacted repositories.
 
 My recommendation: use Option 1 for your lead — it sounds professional and shows you’ve thought through the security + technical impact.
+
+
+The primary downside of this approach is that it rewrites repository history, which changes commit hashes across branches and tags. This requires team members to re-sync or re-clone their local repositories and may impact active pull requests or references to historical commit IDs in Jira/PR discussions. There is also a need to carefully validate the replacement pattern to avoid unintended code/config changes. From a security standpoint, this is the most effective way to remove secrets from historical commits, but it should be executed with team communication and approval.
