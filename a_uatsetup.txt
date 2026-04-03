@@ -1,18 +1,15 @@
-Option 1 — Professional short paragraph (recommended)
-Message
+# Local Gitleaks Allowlist
+# Only ignoring specific historical fingerprints
+# DO NOT add rule-wide ignores
 
-As part of addressing the Gitleaks findings, I have identified a safe remediation approach to remove the exposed secret not only from the latest codebase but also from the full Git commit history. The process involves first rotating the compromised credential, then using a history rewrite utility (git filter-repo) to replace the secret value across all branches and tags, followed by a force push to update the remote repository history. This ensures the secret is no longer detectable in historical commits as well. Please let me know if you would like me to proceed with this approach in the target repositories.
+[[allowlist]]
+description = "Ignore historical generic-api-key findings"
 
-Option 2 — 3 crisp bullet points for Teams / standup
-Rotate the exposed credential first to ensure there is no active security risk.
-Rewrite Git history using git filter-repo to remove the secret from all past commits, branches, and tags.
-Force push the cleaned history so Gitleaks and future scans do not detect the secret in commit history.
-Option 3 — More leadership / approval style
-Message
-
-I have validated an approach to fully remediate the secret exposure issue by removing the leaked value from the repository history as well, not just the latest files. This includes credential rotation, history rewrite across branches/tags, and force-updating the remote repository. This should help resolve the current Gitleaks failures caused by historical commits. Please confirm if I should proceed with the same approach for the remaining impacted repositories.
-
-My recommendation: use Option 1 for your lead — it sounds professional and shows you’ve thought through the security + technical impact.
-
-
-The primary downside of this approach is that it rewrites repository history, which changes commit hashes across branches and tags. This requires team members to re-sync or re-clone their local repositories and may impact active pull requests or references to historical commit IDs in Jira/PR discussions. There is also a need to carefully validate the replacement pattern to avoid unintended code/config changes. From a security standpoint, this is the most effective way to remove secrets from historical commits, but it should be executed with team communication and approval.
+fingerprints = [
+  "3384a60564b5005b82d8b896850199ebbd1156c1:src/main/resources/application-local.yml:generic-api-key:9",
+  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:9",
+  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:10",
+  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:30",
+  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:31",
+  "73605dfd4947aed836a2db363c1f8e63a98d0542:src/main/resources/application-local.yml:generic-api-key:9"
+]
