@@ -1,15 +1,203 @@
-# Local Gitleaks Allowlist
-# Only ignoring specific historical fingerprints
-# DO NOT add rule-wide ignores
+These logs point to a very specific startup failure.
 
-[[allowlist]]
-description = "Ignore historical generic-api-key findings"
+## Root cause
 
-fingerprints = [
-  "3384a60564b5005b82d8b896850199ebbd1156c1:src/main/resources/application-local.yml:generic-api-key:9",
-  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:9",
-  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:10",
-  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:30",
-  "61b07a525ae157c7ca53d1090ddfe45ab42c0fcf:gitleaks-baseline.json:generic-api-key:31",
-  "73605dfd4947aed836a2db363c1f8e63a98d0542:src/main/resources/application-local.yml:generic-api-key:9"
-]
+Your app is failing during Spring Security OAuth2 client initialization because it cannot resolve the issuer metadata for:
+
+```text
+https://authsvc-uat.cvshealth.com
+```
+
+The key line is:
+
+```text
+Unable to resolve Configuration with the provided Issuer of "https://authsvc-uat.cvshealth.com"
+```
+
+That means Spring Boot is trying to build the OAuth client from an `issuer-uri`, and during startup it attempts discovery from the issuer’s well-known endpoint. That lookup is failing, so bean creation fails, and the app does not start.
+
+## What is failing under the hood
+
+This chain in the stack trace tells the story:
+
+* `userSessionController` fails
+* because `userSessionService` fails
+* because `authorizedClientRepository` fails
+* because `authorizedClientService` fails
+* because `clientRegistrationRepository` fails
+* because Spring cannot create OAuth client registration from the issuer
+* because issuer discovery for `https://authsvc-uat.cvshealth.com` fails
+
+So this is not Redis, not Mongo, and not Istio health probe. It is an OAuth/OIDC configuration issue at app startup.
+
+## Why this likely happened “suddenly”
+
+You mentioned it was working until last night. The most likely reasons are:
+
+1. The app is running with the wrong profile/config and is now picking up a UAT issuer URL.
+2. The issuer URL changed, DNS changed, cert changed, or the auth service is down/unreachable.
+3. The app restarted and now re-resolves OAuth metadata during startup, exposing a config/network issue that was masked before.
+4. A secret/configmap/env var changed and now points to the wrong issuer.
+
+## The biggest clue in your logs
+
+Your traffic screenshots earlier were for QA hostnames like:
+
+```text
+mics-app-qa.mics.cvshealth.com
+```
+
+But the login pod log is trying to use:
+
+```text
+https://authsvc-uat.cvshealth.com
+```
+
+That mismatch is suspicious.
+
+If this is the QA deployment, it should usually be using the QA auth issuer, not the UAT one.
+
+## What to check first
+
+### 1. Check active profile and env vars in the pod
+
+You need to confirm what profile and OAuth issuer the pod is actually using:
+
+```bash
+kubectl describe pod <login-pod-name> -n <qa-namespace>
+kubectl exec -it <login-pod-name> -n <qa-namespace> -- printenv | grep -i -E "SPRING_PROFILES_ACTIVE|ISSUER|OAUTH|CLIENT"
+```
+
+Look for values like:
+
+* `SPRING_PROFILES_ACTIVE`
+* `SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_*_ISSUER_URI`
+* any custom `AUTH_*` env vars
+
+### 2. Check your QA config files
+
+Search in the repo for:
+
+* `authsvc-uat.cvshealth.com`
+* `issuer-uri`
+* `spring.security.oauth2.client`
+* `provider`
+* `my-client`
+
+You are likely to find something like:
+
+```yaml
+spring:
+  security:
+    oauth2:
+      client:
+        provider:
+          my-client:
+            issuer-uri: https://authsvc-uat.cvshealth.com
+```
+
+If this is the QA deployment, that is probably wrong.
+
+### 3. Verify the issuer endpoint manually
+
+From your machine or from a pod that has curl:
+
+```bash
+curl -I https://authsvc-uat.cvshealth.com
+curl https://authsvc-uat.cvshealth.com/.well-known/openid-configuration
+```
+
+For Spring issuer discovery to work, the issuer must return valid OIDC metadata, typically at:
+
+```text
+https://authsvc-uat.cvshealth.com/.well-known/openid-configuration
+```
+
+If that endpoint fails, redirects badly, has TLS issues, or returns non-OIDC content, startup will fail exactly like this.
+
+### 4. Check whether DNS/network changed inside cluster
+
+If you can run a temporary test pod in the same namespace:
+
+```bash
+kubectl run nettest --rm -it --image=curlimages/curl -n <qa-namespace> -- sh
+```
+
+Then test:
+
+```bash
+nslookup authsvc-uat.cvshealth.com
+curl -vk https://authsvc-uat.cvshealth.com/.well-known/openid-configuration
+```
+
+This tells you whether the pod can resolve and reach the issuer from inside GKE.
+
+## Most likely scenarios
+
+### Scenario A: wrong issuer configured for QA
+
+This is the most likely one from what you shared.
+
+If QA app is using UAT issuer, fix the QA config to the correct QA issuer and redeploy.
+
+### Scenario B: issuer service is down or inaccessible
+
+If the URL is supposed to be UAT, then the service at that URL is either:
+
+* down
+* blocked by network/firewall
+* having DNS issues
+* having TLS/cert issues
+* not exposing OIDC metadata correctly
+
+Then the fix is on the auth service / networking side.
+
+### Scenario C: config source changed after restart
+
+If the app previously had cached/stable runtime and after restart it picked a changed secret/configmap/env var, then you need to compare current deployed config versus the last working config.
+
+## What you should fix
+
+### If this is a QA deployment
+
+Check and correct the issuer URI in QA config.
+
+It should likely be something like QA auth service, not:
+
+```text
+https://authsvc-uat.cvshealth.com
+```
+
+### If UAT issuer is intentional
+
+Then make sure this works from inside the cluster:
+
+```text
+https://authsvc-uat.cvshealth.com/.well-known/openid-configuration
+```
+
+If that URL does not return valid OIDC metadata, Spring Security startup will keep failing.
+
+## Why the app is not starting at all
+
+Because the OAuth client beans are created during startup, not lazily after the first request. So if issuer discovery fails, Spring cancels application context initialization and stops Tomcat.
+
+That matches these lines:
+
+* `Exception encountered during context initialization - cancelling refresh attempt`
+* `Error starting ApplicationContext`
+* `Application run failed`
+
+## My recommendation
+
+Start with these three checks in this order:
+
+1. Confirm whether the login service in QA is incorrectly pointing to `authsvc-uat.cvshealth.com`.
+2. Hit `https://authsvc-uat.cvshealth.com/.well-known/openid-configuration` from inside the cluster.
+3. Compare the current config/secret/env vars with the last working deployment.
+
+## Most probable fix
+
+If this is the QA pod, change the OAuth issuer from UAT to the correct QA issuer and redeploy.
+
+If you share the login service `application-qa.yml` or deployment env section for OAuth settings, I can pinpoint the exact property that needs to be changed.
