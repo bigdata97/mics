@@ -1,1 +1,284 @@
-Hi team, regarding the login-service issue related to the `issuer-uri` failure, I checked with the Ping team. They confirmed this is a known certificate-related issue, and they have already opened a ticket with the vendor for further investigation. We are currently awaiting an update from them, and I will share the next update here as soon as we hear back.
+Use this complete approach in your GitHub Actions job:
+
+* create a temporary **user-level `.npmrc`**
+* run `npm ci`
+* delete the temporary `.npmrc` afterward
+
+This is the cleanest fix for your case.
+
+## Why this is the right solution
+
+Your repo `.npmrc` should keep only:
+
+* registry URL
+* non-secret npm settings
+
+Your workflow should handle:
+
+* token injection
+* cleanup after install
+
+That avoids storing secrets in the repo.
+
+---
+
+# 1) Keep repo `.npmrc` like this
+
+In the repo root `.npmrc`, keep it simple:
+
+```ini
+engine-strict=true
+package-lock=true
+always-auth=true
+registry=https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/
+```
+
+Do **not** keep token lines there.
+
+---
+
+# 2) Update workflow with create + delete `.npmrc`
+
+In your `test-and-sonar` job, use this full block:
+
+```yaml
+test-and-sonar:
+  needs: [generate-token]
+  runs-on: self-hosted
+  name: Run Tests and Internal Sonar Scan
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.21.1'
+
+    - name: Create temporary npm auth file
+      shell: bash
+      run: |
+        cat > ~/.npmrc <<EOF
+        engine-strict=true
+        package-lock=true
+        always-auth=true
+        registry=https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/
+        //cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/:_authToken=${JFROG_READER_TOKEN}
+        EOF
+      env:
+        JFROG_READER_TOKEN: ${{ secrets.JFROG_READER_TOKEN }}
+
+    - name: Install Dependencies
+      run: |
+        rm -rf node_modules
+        npm ci
+
+    - name: Delete temporary npm auth file
+      if: always()
+      shell: bash
+      run: |
+        rm -f ~/.npmrc
+
+    - name: Run Tests with Coverage
+      run: npm run test:coverage
+      continue-on-error: true
+
+    - name: CVS Internal Sonar Scan
+      uses: cvs-health-source-code/gha_workflow_actions/actions/sonar_scan@beta
+      with:
+        PROJECT_KEY: ${{ github.repository_owner }}_${{ github.event.repository.name }}
+        PROJECT_NAME: mics-ui-components
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_ANALYSIS_TOKEN: ${{ secrets.SONAR_ANALYSIS_TOKEN }}
+        INPUT_ARGS: >
+          -Dsonar.sources=src
+          -Dsonar.tests=src
+          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+          -Dsonar.test.inclusions=**/*.spec.js,**/*.test.js,**/*.spec.jsx,**/*.test.jsx
+          -Dsonar.coverage.exclusions=**/*.spec.js,**/*.test.js,**/*.spec.jsx,**/*.test.jsx,**/setupTests.js,**/main.jsx,**/__mocks__/**
+```
+
+---
+
+# 3) Even better: make cleanup always happen even if install fails
+
+Right now, if `npm ci` fails, the cleanup step still runs because of:
+
+```yaml
+if: always()
+```
+
+That is good and should stay.
+
+---
+
+# 4) Safer version with backup and restore
+
+If your self-hosted runner may already have a `~/.npmrc`, use this instead so you don’t overwrite it permanently.
+
+```yaml
+- name: Backup existing npmrc if present
+  shell: bash
+  run: |
+    if [ -f ~/.npmrc ]; then
+      mv ~/.npmrc ~/.npmrc.backup
+    fi
+
+- name: Create temporary npm auth file
+  shell: bash
+  run: |
+    cat > ~/.npmrc <<EOF
+    engine-strict=true
+    package-lock=true
+    always-auth=true
+    registry=https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/
+    //cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/:_authToken=${JFROG_READER_TOKEN}
+    EOF
+  env:
+    JFROG_READER_TOKEN: ${{ secrets.JFROG_READER_TOKEN }}
+
+- name: Install Dependencies
+  shell: bash
+  run: |
+    rm -rf node_modules
+    npm ci
+
+- name: Cleanup and restore npmrc
+  if: always()
+  shell: bash
+  run: |
+    rm -f ~/.npmrc
+    if [ -f ~/.npmrc.backup ]; then
+      mv ~/.npmrc.backup ~/.npmrc
+    fi
+```
+
+This version is better for a **self-hosted runner**.
+
+---
+
+# 5) My recommended final version for your repo
+
+Since you are on **self-hosted**, I recommend this full version:
+
+```yaml
+test-and-sonar:
+  needs: [generate-token]
+  runs-on: self-hosted
+  name: Run Tests and Internal Sonar Scan
+  steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22.21.1'
+
+    - name: Backup existing npmrc if present
+      shell: bash
+      run: |
+        if [ -f ~/.npmrc ]; then
+          mv ~/.npmrc ~/.npmrc.backup
+        fi
+
+    - name: Create temporary npm auth file
+      shell: bash
+      run: |
+        cat > ~/.npmrc <<EOF
+        engine-strict=true
+        package-lock=true
+        always-auth=true
+        registry=https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/
+        //cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/:_authToken=${JFROG_READER_TOKEN}
+        EOF
+      env:
+        JFROG_READER_TOKEN: ${{ secrets.JFROG_READER_TOKEN }}
+
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        rm -rf node_modules
+        npm ci
+
+    - name: Cleanup and restore npmrc
+      if: always()
+      shell: bash
+      run: |
+        rm -f ~/.npmrc
+        if [ -f ~/.npmrc.backup ]; then
+          mv ~/.npmrc.backup ~/.npmrc
+        fi
+
+    - name: Run Tests with Coverage
+      run: npm run test:coverage
+      continue-on-error: true
+
+    - name: CVS Internal Sonar Scan
+      uses: cvs-health-source-code/gha_workflow_actions/actions/sonar_scan@beta
+      with:
+        PROJECT_KEY: ${{ github.repository_owner }}_${{ github.event.repository.name }}
+        PROJECT_NAME: mics-ui-components
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        SONAR_ANALYSIS_TOKEN: ${{ secrets.SONAR_ANALYSIS_TOKEN }}
+        INPUT_ARGS: >
+          -Dsonar.sources=src
+          -Dsonar.tests=src
+          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+          -Dsonar.test.inclusions=**/*.spec.js,**/*.test.js,**/*.spec.jsx,**/*.test.jsx
+          -Dsonar.coverage.exclusions=**/*.spec.js,**/*.test.js,**/*.spec.jsx,**/*.test.jsx,**/setupTests.js,**/main.jsx,**/__mocks__/**
+```
+
+---
+
+# 6) What to do in Dockerfile
+
+Your Dockerfile already follows the same idea:
+
+* create auth temporarily
+* install
+* delete auth
+
+That pattern is fine.
+
+But I recommend later improving this line:
+
+```dockerfile
+&& npm install \
+```
+
+to:
+
+```dockerfile
+&& npm ci \
+```
+
+and remove this line if possible:
+
+```dockerfile
+RUN rm -f package-lock.json
+```
+
+because deleting lockfile is not ideal.
+
+---
+
+# 7) Final simple summary
+
+## In repo `.npmrc`
+
+Keep only non-secret config.
+
+## In workflow
+
+* backup old `~/.npmrc`
+* create temp `~/.npmrc` with JFrog token
+* run `npm ci`
+* delete temp `~/.npmrc`
+* restore old one if it existed
+
+That is the complete clean solution.
+
+If you want, I can now give you the **exact before/after diff for your current YAML** so you can paste only the changed lines.
