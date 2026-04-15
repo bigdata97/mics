@@ -1,22 +1,14 @@
-- name: Update deployment.yaml
+- name: Create Pull Request
+  if: steps.commit-push.outputs.changes == 'true'
+  env:
+    GH_TOKEN: ${{ secrets.GHA_TOKEN }}
   run: |
-    TAG="${{ needs.prepare-tag.outputs.tag }}"
-    IMAGE_REPO="cvsh.jfrog.io/cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components/mics-ui-components"
-    NEW_IMAGE="${IMAGE_REPO}:${TAG}"
+    PR_URL=$(gh pr create \
+      --base main \
+      --head "$BRANCH_NAME_FOR_PR" \
+      --title "Update image tag to ${TAG} (${ENV_NAME})" \
+      --body "Automated image Tag update for ${ENV_NAME} environment."
+    )
 
-    echo "TAG is: $TAG" >> $GITHUB_STEP_SUMMARY
-    echo "New image will be: $NEW_IMAGE" >> $GITHUB_STEP_SUMMARY
-    echo "Deployment_path is: $DEPLOY_PATH" >> $GITHUB_STEP_SUMMARY
-
-    export NEW_IMAGE
-
-    echo "Container names found:"
-    yq e '.spec.template.spec.containers[].name' "$DEPLOY_PATH"
-
-    echo "Old image:"
-    yq e '.spec.template.spec.containers[] | select(.name == "mics-ui-components") | .image' "$DEPLOY_PATH"
-
-    yq e '(.spec.template.spec.containers[] | select(.name == "mics-ui-components") | .image) = strenv(NEW_IMAGE)' -i "$DEPLOY_PATH"
-
-    echo "Updated image:"
-    yq e '.spec.template.spec.containers[] | select(.name == "mics-ui-components") | .image' "$DEPLOY_PATH"
+    echo "### 🔗 Pull Request Created" | tee -a "$GITHUB_STEP_SUMMARY"
+    echo "[Open Pull Request]($PR_URL)" | tee -a "$GITHUB_STEP_SUMMARY"
