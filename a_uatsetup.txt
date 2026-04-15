@@ -1,7 +1,22 @@
-DEPLOY_PATH: ${{ 
-  github.event.inputs.deployment-environment == 'development' && 'k8s-manifests/development/deployment.yaml' ||
-  github.event.inputs.deployment-environment == 'qa' && 'k8s-manifests/qa/deployment-qa.yaml' ||
-  github.event.inputs.deployment-environment == 'uat' && 'k8s-manifests/uat/deployment-uat.yaml' ||
-  github.event.inputs.deployment-environment == 'prod' && 'k8s-manifests/prod/deployment-prod.yaml' ||
-  'k8s-manifests/local/deployment-local.yaml'
-}}
+- name: Update deployment.yaml
+  run: |
+    TAG="${{ needs.prepare-tag.outputs.tag }}"
+    IMAGE_REPO="cvsh.jfrog.io/cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components/mics-ui-components"
+    NEW_IMAGE="${IMAGE_REPO}:${TAG}"
+
+    echo "TAG is: $TAG" >> $GITHUB_STEP_SUMMARY
+    echo "New image will be: $NEW_IMAGE" >> $GITHUB_STEP_SUMMARY
+    echo "Deployment_path is: $DEPLOY_PATH" >> $GITHUB_STEP_SUMMARY
+
+    export NEW_IMAGE
+
+    echo "Container names found:"
+    yq e '.spec.template.spec.containers[].name' "$DEPLOY_PATH"
+
+    echo "Old image:"
+    yq e '.spec.template.spec.containers[] | select(.name == "mics-ui-components") | .image' "$DEPLOY_PATH"
+
+    yq e '(.spec.template.spec.containers[] | select(.name == "mics-ui-components") | .image) = strenv(NEW_IMAGE)' -i "$DEPLOY_PATH"
+
+    echo "Updated image:"
+    yq e '.spec.template.spec.containers[] | select(.name == "mics-ui-components") | .image' "$DEPLOY_PATH"
