@@ -1,14 +1,16 @@
-- name: Create Pull Request
-  if: steps.commit-push.outputs.changes == 'true'
-  env:
-    GH_TOKEN: ${{ secrets.GHA_TOKEN }}
-  run: |
-    PR_URL=$(gh pr create \
-      --base main \
-      --head "$BRANCH_NAME_FOR_PR" \
-      --title "Update image tag to ${TAG} (${ENV_NAME})" \
-      --body "Automated image Tag update for ${ENV_NAME} environment."
-    )
+name: Delete merged PR branch
 
-    echo "### 🔗 Pull Request Created" | tee -a "$GITHUB_STEP_SUMMARY"
-    echo "[Open Pull Request]($PR_URL)" | tee -a "$GITHUB_STEP_SUMMARY"
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  delete-branch:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete branch
+        run: |
+          BRANCH_NAME=${{ github.event.pull_request.head.ref }}
+          git push origin --delete $BRANCH_NAME
