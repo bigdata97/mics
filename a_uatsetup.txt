@@ -1,16 +1,23 @@
-name: Delete merged PR branch
+name: Delete merged update-image branch
 
 on:
   pull_request:
     types: [closed]
+    branches:
+      - main
 
 jobs:
   delete-branch:
-    if: github.event.pull_request.merged == true
+    if: >
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'update-image-')
     runs-on: ubuntu-latest
 
     steps:
       - name: Delete branch
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          BRANCH_NAME=${{ github.event.pull_request.head.ref }}
-          git push origin --delete $BRANCH_NAME
+          gh api \
+            -X DELETE \
+            repos/${{ github.repository }}/git/refs/heads/${{ github.event.pull_request.head.ref }}
