@@ -1,23 +1,8 @@
-name: Delete merged update-image branch
-
-on:
-  pull_request:
-    types: [closed]
-    branches:
-      - main
-
-jobs:
-  delete-branch:
-    if: >
-      github.event.pull_request.merged == true &&
-      startsWith(github.event.pull_request.head.ref, 'update-image-')
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Delete branch
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api \
-            -X DELETE \
-            repos/${{ github.repository }}/git/refs/heads/${{ github.event.pull_request.head.ref }}
+Steps to Follow
+Open your GitHub Actions workflow file (e.g., .github/workflows/*.yaml)
+Add the following permissions block at the top level of the workflow (just above jobs):
+permissions:
+  id-token: write
+  contents: read
+Save and commit the changes
+Re-run the workflow to verify the issue is resolved
