@@ -1,8 +1,41 @@
-Steps to Follow
-Open your GitHub Actions workflow file (e.g., .github/workflows/*.yaml)
-Add the following permissions block at the top level of the workflow (just above jobs):
-permissions:
-  id-token: write
-  contents: read
-Save and commit the changes
-Re-run the workflow to verify the issue is resolved
+Here’s a clean and professional update you can give in your scrum, tailored to your ArgoCD + GKE setup:
+
+---
+
+### 🗣️ Scrum Update (Short & Crisp)
+
+**“Yesterday I started working on identifying a rollback strategy for ArgoCD deployments into GKE.
+Currently, I’m analyzing different approaches like Git-based rollback using previous commits, ArgoCD sync to specific revisions, and leveraging deployment revision history in Kubernetes.
+Today, I’ll finalize the recommended approach and validate it with a small test deployment. No blockers as of now.”**
+
+---
+
+### 💡 If they ask follow-up (you can say this)
+
+**Approaches being evaluated:**
+
+* **Git revert-based rollback** → revert manifest changes and let ArgoCD sync
+* **ArgoCD UI/CLI rollback** → sync to previous Git revision
+* **Kubernetes rollout undo** → use deployment revision history (`kubectl rollout undo`)
+* **Versioned image rollback** → redeploy previous Docker image tag
+
+**Goal:**
+
+* Choose a **safe, auditable, and GitOps-compliant** rollback strategy
+* Ensure it works across **dev → qa → uat → prod pipelines**
+
+---
+
+### 🎯 Slightly stronger version (if you want to sound more ownership-driven)
+
+**“I’ve started defining a standardized rollback strategy for ArgoCD-based deployments in GKE. I’m comparing Git revert vs ArgoCD revision-based rollback to ensure we stay aligned with GitOps principles. Today I’ll validate the approach with a test scenario and document the recommended process for team usage.”**
+
+---
+
+If you want, I can also give you:
+
+* ✅ A **final recommended rollback strategy (best practice for your setup)**
+* ✅ **Step-by-step commands (ArgoCD + kubectl)**
+* ✅ A **Confluence-ready document** for your team
+
+Just tell me 👍
