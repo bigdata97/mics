@@ -1,128 +1,115 @@
-To check what IAM roles a Service Account has in GCP using `gcloud`, you generally check the IAM policy bindings of the project (or resource) and filter for that Service Account.
+Branch-Aware CI Setup Steps for Java Backend Repositories
 
-## 1. Check roles of a Service Account at Project Level
+These steps are applicable for Java-based backend service repositories in the MICS project.
 
-```bash
-gcloud projects get-iam-policy PROJECT_ID \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:SERVICE_ACCOUNT_EMAIL" \
-  --format="table(bindings.role)"
-```
+1. Update the CI workflow file
 
-### Example
+Go to the repository for your backend service.
 
-```bash
-gcloud projects get-iam-policy my-gcp-project \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:my-sa@my-gcp-project.iam.gserviceaccount.com" \
-  --format="table(bindings.role)"
-```
+Navigate to:
 
-This will show output like:
+.github/workflows/ci.yaml
 
-```text
-ROLE
-roles/storage.admin
-roles/pubsub.publisher
-roles/bigquery.dataEditor
-```
+Open the reference CI workflow from:
 
----
+gha_workflow_actions/.github/workflows/maven_docker.yaml
 
-## 2. Get Full Detailed Output (JSON)
+Copy the complete content from that file and paste it into your service repo’s:
 
-```bash
-gcloud projects get-iam-policy PROJECT_ID \
-  --format=json
-```
+.github/workflows/ci.yaml
 
-Then search for the Service Account email.
+Commit this change to the appropriate branch.
 
-Useful when:
+2. Add required repository variables
 
-* debugging inherited roles
-* checking conditions
-* auditing all permissions
+In your service repository, go to:
 
----
+Settings → Secrets and variables → Actions → Variables
 
-## 3. Check Roles Across Organization / Folder / Project
+Click New repository variable and create the following variables.
 
-### Organization Level
-
-```bash
-gcloud organizations get-iam-policy ORGANIZATION_ID \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:SERVICE_ACCOUNT_EMAIL" \
-  --format="table(bindings.role)"
-```
-
-### Folder Level
-
-```bash
-gcloud resource-manager folders get-iam-policy FOLDER_ID \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:SERVICE_ACCOUNT_EMAIL" \
-  --format="table(bindings.role)"
-```
-
----
-
-## 4. Check Which Members Have Access TO the Service Account
-
-This is different.
-
-If you want to know:
-
-> who can impersonate or use this service account
-
-Run:
-
-```bash
-gcloud iam service-accounts get-iam-policy SERVICE_ACCOUNT_EMAIL
-```
+Variable 1
+Name: ALLOWED_BRANCHES
+Value: develop,release/*,main
+Variable 2
+Name: APP_NAME
+Value: <repo-name>
 
 Example:
 
-```bash
-gcloud iam service-accounts get-iam-policy \
-my-sa@my-project.iam.gserviceaccount.com
-```
+Name: APP_NAME
+Value: mics-logo-service
+Variable 3
+Name: WEBHOOK_MICS_RELEASE_APPROVALS_C...
+Value: <use the approved Teams/webhook URL shared for MICS release approvals>
 
-This shows roles like:
+Use the exact variable name and webhook value provided in the shared setup note. These names and values are case-sensitive.
 
-* `roles/iam.serviceAccountUser`
-* `roles/iam.serviceAccountTokenCreator`
+3. Update repository custom property
 
-assigned on the Service Account itself.
+Go to:
 
----
+Settings → Custom properties
 
-## 5. Quick One-Liner (Very Common)
+Scroll down and find:
 
-```bash
-PROJECT_ID="my-project"
-SA="my-sa@my-project.iam.gserviceaccount.com"
+ruleset-compliance
 
-gcloud projects get-iam-policy $PROJECT_ID \
---flatten="bindings[].members" \
---filter="bindings.members:$SA" \
---format="table(bindings.role)"
-```
+Change the value from:
 
----
+none
 
-## 6. If You Want ALL Permissions (not just roles)
+to:
 
-You can use Policy Troubleshooter or IAM Recommender, but roles are usually sufficient for DevOps/debugging tasks in GKE, Terraform, GitHub Actions WIF, Pub/Sub, Artifact Registry, etc.
+standard
 
-For example in your MICS/GitOps setup, this is commonly used to verify whether a CI/CD Service Account has:
+Save the change.
 
-* `roles/container.developer`
-* `roles/artifactregistry.writer`
-* `roles/iam.workloadIdentityUser`
-* `roles/storage.admin`
-* `roles/pubsub.publisher`
-* `roles/secretmanager.secretAccessor`
+This is required for the branch protection / SOD gating used by the reusable CI workflow.
 
-etc.
+4. Ensure develop branch is available
+
+If the repository already has a develop branch, make sure it is up to date with main.
+
+If the repository does not have a develop branch:
+
+Create a new develop branch from main.
+
+Then create a PR:
+
+From: main
+To: develop
+
+Merge the PR so that develop has the latest code from main.
+
+5. Run the branch-aware CI workflow
+
+After the CI file, repository variables, custom property, and branch setup are complete:
+
+Go to:
+
+Actions
+
+Select the workflow:
+
+Branch Aware CI Workflow
+
+Click:
+
+Run workflow
+
+Use the following selections:
+
+Use workflow from: develop
+Select the environment to deploy to: dev
+
+Keep the remaining options unchanged unless specifically required.
+
+Then click:
+
+Run workflow
+Notes
+
+These steps are for Java-based backend services only. Python-based services may require slightly different workflow configuration.
+
+For any questions or issues during setup, please reach out to me.
