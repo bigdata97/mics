@@ -1,18 +1,11 @@
-Hi Team,
+RUN --mount=type=secret,id=artifactory_token \
+    TOKEN="$(cat /run/secrets/artifactory_token)" && \
+    echo "registry=https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/" > /root/.npmrc && \
+    echo "always-auth=true" >> /root/.npmrc && \
+    echo "//cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/:_authToken=${TOKEN}" >> /root/.npmrc && \
+    npm install && \
+    rm -f /root/.npmrc
 
-I have prepared the Confluence document for enabling the branch-aware CI setup for Java-based backend repositories in MICS. The document includes:
+COPY . .
 
-CI workflow setup steps
-Repository variables configuration
-Custom properties update
-Develop branch setup steps
-Instructions to run the branch-aware deployment workflow for DEV environment
-
-Please follow the documented steps for the repositories you are responsible for.
-
-Confluence Link:
-<PASTE_CONFLUENCE_LINK_HERE>
-
-These steps are currently applicable for Java-based backend services. Python-based services will have a slightly different setup and will be shared separately.
-
-If you face any issues or have any questions during the setup, please reach out to me.
+RUN npm run build
