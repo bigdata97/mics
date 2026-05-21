@@ -1,11 +1,303 @@
-RUN --mount=type=secret,id=artifactory_token \
-    TOKEN="$(cat /run/secrets/artifactory_token)" && \
-    echo "registry=https://cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/" > /root/.npmrc && \
-    echo "always-auth=true" >> /root/.npmrc && \
-    echo "//cvsh.jfrog.io/artifactory/api/npm/cvs-aetnahealth-npm/:_authToken=${TOKEN}" >> /root/.npmrc && \
-    npm install && \
-    rm -f /root/.npmrc
+Since this is the **first production release planning meeting** for the MICS platform, your role as DevOps is extremely important.
+You do NOT need to behave like you know every business detail. Your responsibility is mainly around:
 
-COPY . .
+* Deployment readiness
+* Environment readiness
+* Rollback preparedness
+* Release flow/process
+* Risks/dependencies
+* Monitoring/support readiness
+* Coordination items
 
-RUN npm run build
+And because this is the initial production deployment for MICS, leadership will mainly want confidence that:
+
+* deployment process is stable
+* production access/processes are defined
+* rollback exists
+* release sequencing is known
+* there are no hidden infra risks
+
+---
+
+# Your mindset in the meeting
+
+You should sound:
+
+* calm
+* structured
+* operational
+* risk-aware
+* collaborative
+
+Avoid:
+
+* overexplaining technical details
+* talking too deeply unless asked
+* sounding uncertain
+* introducing new risky ideas during planning meeting
+
+---
+
+# What you should prepare BEFORE the meeting
+
+Prepare these areas mentally or in notes.
+
+---
+
+# 1. Production deployment architecture flow
+
+You should be able to explain:
+
+```text
+GitHub Repo
+   ↓
+GitHub Actions CI
+   ↓
+Docker Image Build + Push (JFrog)
+   ↓
+GitOps Repo Manifest Update
+   ↓
+ArgoCD Sync
+   ↓
+GKE Deployment
+   ↓
+Istio Gateway / VirtualService
+   ↓
+Application Access
+```
+
+You already worked on:
+
+* branch-aware deployment
+* GitOps
+* ArgoCD
+* gateway/virtualservice
+* environment URLs
+
+So you already have good content.
+
+---
+
+# 2. Deployment strategy
+
+You should explain:
+
+## Current deployment approach
+
+Example:
+
+> “For production deployment, we are planning to follow GitOps-based deployment through ArgoCD.
+> CI pipeline will build and push the Docker image to JFrog, update the GitOps manifests with the new image tag, and ArgoCD will synchronize the deployment into the production cluster.”
+
+---
+
+# 3. Rollback strategy (VERY IMPORTANT)
+
+This is one of the most important production questions.
+
+You should confidently explain:
+
+## Recommended answer
+
+> “We already evaluated rollback strategies.
+> Primary rollback approach will be Git-based rollback through GitOps manifests.
+> In case of issues, we can revert the deployment manifest/image tag commit and ArgoCD will automatically sync the previous stable version.”
+
+Then optionally:
+
+> “Additionally, Kubernetes rollout undo and ArgoCD sync history are available as secondary rollback options.”
+
+This will sound very mature.
+
+---
+
+# 4. Production deployment controls
+
+Mention these.
+
+## Example points
+
+* Production deployments only from `main`
+* Protected branches enabled
+* PR approvals required
+* Manual workflow trigger
+* Environment approvals/gates enabled
+* Production secrets separated
+* GitHub environment restrictions
+
+You already worked on these concepts.
+
+---
+
+# 5. Things to ask/discuss in the meeting
+
+This is VERY important because it shows ownership.
+
+You can ask:
+
+## Release planning questions
+
+### Deployment window
+
+> “Do we already have a preferred deployment window for initial production release?”
+
+### Freeze period
+
+> “Will there be a code freeze before release?”
+
+### Rollback decision owner
+
+> “In case rollback is needed, who will be the final approver for rollback execution?”
+
+### Validation ownership
+
+> “Who will validate smoke tests/business validation after deployment?”
+
+### Production access
+
+> “Do we already have production cluster and ArgoCD access finalized for deployment activities?”
+
+### Monitoring
+
+> “Are all required dashboards/alerts/logging validations already identified for production monitoring?”
+
+### DNS / Certificates
+
+> “Are production DNS entries and TLS certificates already provisioned and validated?”
+
+This is excellent DevOps-level thinking.
+
+---
+
+# 6. Topics you should be ready to discuss
+
+## ArgoCD
+
+* Sync process
+* Auto sync/manual sync
+* Rollback
+* Health status
+
+## Kubernetes
+
+* Rolling updates
+* Replica strategy
+* Resource limits
+* Readiness/liveness probes
+
+## Istio
+
+* Gateway
+* VirtualService
+* Hostnames
+* TLS certificates
+
+## CI/CD
+
+* Build
+* Docker push
+* Tagging strategy
+* GitOps manifest update
+
+---
+
+# 7. Possible risks to mention
+
+This gives leadership confidence.
+
+## Example
+
+> “Some areas we should validate carefully before production are:
+>
+> * production hostname and certificate validation
+> * external integrations
+> * authentication/SSO flow
+> * image pull secret validations
+> * monitoring/alerting
+> * rollback timing and ownership”
+
+---
+
+# 8. Good professional sentences you can use
+
+## Intro
+
+> “From DevOps perspective, we are mainly focusing on deployment readiness, GitOps synchronization, rollback preparedness, and production environment validation.”
+
+---
+
+## About deployment
+
+> “The deployment process is already standardized through GitHub Actions and ArgoCD-based GitOps flow.”
+
+---
+
+## About rollback
+
+> “Rollback can be handled quickly through Git revert and ArgoCD synchronization to the previous stable image tag.”
+
+---
+
+## About production safety
+
+> “We are trying to minimize manual intervention and keep the deployment process reproducible and auditable.”
+
+---
+
+# 9. What NOT to do
+
+Avoid:
+
+* proposing major architecture changes
+* criticizing existing setup
+* saying “I think”
+* speaking continuously too long
+* deep debugging discussions unless asked
+* sounding unsure about prod readiness
+
+---
+
+# 10. Strong closing statement
+
+At some point you can say:
+
+> “From DevOps side, we are mainly trying to ensure that deployment, rollback, monitoring, and access controls are production-ready before the initial release.”
+
+That sounds very solid.
+
+---
+
+# 11. Most likely meeting agenda
+
+Probably leadership will discuss:
+
+* Release timeline
+* Production readiness
+* Deployment ownership
+* Validation process
+* Rollback plan
+* Environment dependencies
+* Go-live support plan
+* Production access
+* Smoke testing
+* Monitoring
+* Communication/escalation plan
+
+---
+
+# 12. Bonus preparation (very useful)
+
+Prepare:
+
+* current deployment flow diagram
+* rollback steps
+* deployment sequence
+* production checklist
+
+Even simple notes are enough.
+
+Because if someone asks:
+
+> “Can DevOps document the production deployment steps?”
+
+You will already be ready.
