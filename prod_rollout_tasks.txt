@@ -1,0 +1,342 @@
+For your **MICS Initial Production Rollout** story, don't create just a generic checklist. Create a **Go-Live Runbook + Checklist** that can actually be used during the production deployment call.
+
+Since your MICS architecture includes:
+
+* GitHub Actions
+* GitOps Repository
+* ArgoCD
+* GKE
+* Istio Gateway / Virtual Services
+* Apigee X
+* MongoDB
+* Ping SSO
+* Multiple backend Java services
+* UI Components
+
+I would structure the checklist as follows:
+
+# MICS Initial Production Rollout Checklist
+
+## 1. Pre-Go-Live Readiness (1 Week Before)
+
+### Application Readiness
+
+* [ ] All production code merged to release/main branch
+* [ ] Production deployment tag finalized
+* [ ] Production image versions approved
+* [ ] No critical/high security vulnerabilities open
+* [ ] All code review approvals completed
+
+### Infrastructure Readiness
+
+* [ ] Production GKE cluster healthy
+* [ ] Production namespaces created
+* [ ] Resource quotas validated
+* [ ] Ingress/Gateway configurations verified
+* [ ] ArgoCD production project available
+
+### Database Readiness
+
+* [ ] MongoDB production instance accessible
+* [ ] Database backup completed
+* [ ] Rollback backup verified
+* [ ] Connection strings validated
+
+### Secrets Readiness
+
+* [ ] Production secrets created
+* [ ] Secret Manager permissions validated
+* [ ] Mongo credentials verified
+* [ ] Ping credentials verified
+* [ ] API keys verified
+
+---
+
+# 2. Production Configuration Validation
+
+## GitOps Repository
+
+### applications-prod
+
+* [ ] Application manifest exists
+* [ ] Correct namespace configured
+* [ ] Correct image repository configured
+* [ ] Correct image tag configured
+* [ ] Resource requests/limits validated
+
+Example:
+
+```yaml
+applications-prod/
+   logo-service/
+   login-service/
+   ui-components/
+   idcard-generator/
+```
+
+---
+
+## ArgoCD Validation
+
+* [ ] Production ArgoCD application created
+* [ ] Correct GitOps path configured
+* [ ] Sync policy verified
+* [ ] No OutOfSync resources
+
+Verify:
+
+```bash
+argocd app get mics-ui-prod
+```
+
+Expected:
+
+```text
+Status: Synced
+Health: Healthy
+```
+
+---
+
+# 3. Networking Validation
+
+## Istio Gateway
+
+* [ ] Production gateway deployed
+* [ ] Gateway status healthy
+* [ ] TLS certificate attached
+
+Verify:
+
+```bash
+kubectl get gateway -n prod
+```
+
+---
+
+## Virtual Service
+
+* [ ] Production hostname configured
+* [ ] Backend routing validated
+
+Example:
+
+```yaml
+hosts:
+  - mics-app.cvshealth.com
+```
+
+---
+
+## DNS Validation
+
+* [ ] Production DNS record created
+* [ ] DNS propagation completed
+
+Verify:
+
+```bash
+nslookup mics-app.cvshealth.com
+```
+
+---
+
+# 4. Apigee X Validation
+
+This will likely be very important because you recently worked on QA/UAT hostnames.
+
+### Proxy Validation
+
+* [ ] Production proxy deployed
+* [ ] Production environment attached
+* [ ] Target endpoint validated
+
+### Hostname Validation
+
+* [ ] Production hostname configured
+* [ ] TLS certificate valid
+
+Example:
+
+```text
+api.mics.cvshealth.com
+```
+
+### API Validation
+
+* [ ] Health endpoint returns 200
+* [ ] Authentication flow works
+* [ ] Backend routing works
+
+Test:
+
+```bash
+curl https://api.mics.cvshealth.com/health
+```
+
+Expected:
+
+```http
+200 OK
+```
+
+---
+
+# 5. Authentication Validation
+
+## Ping SSO
+
+* [ ] Production client created
+* [ ] Redirect URIs configured
+* [ ] Logout URLs configured
+
+Validate:
+
+* [ ] User login
+* [ ] User logout
+* [ ] Token generation
+* [ ] Token refresh
+
+---
+
+# 6. Backend Services Validation
+
+### Login Service
+
+* [ ] Pod healthy
+* [ ] Logs clean
+* [ ] API responds
+
+### Logo Service
+
+* [ ] Pod healthy
+* [ ] API responds
+
+### ID Card Generator
+
+* [ ] Card generation successful
+
+### Config Service
+
+* [ ] Configuration loaded successfully
+
+---
+
+# 7. Smoke Testing
+
+## User Journey Testing
+
+### Login
+
+* [ ] Login successful
+
+### Search Member
+
+* [ ] Member search works
+
+### Generate ID Card
+
+* [ ] ID card generated
+
+### Download Card
+
+* [ ] Download successful
+
+### Logout
+
+* [ ] Logout successful
+
+---
+
+# 8. Monitoring Validation
+
+## GKE
+
+* [ ] No pod crashes
+* [ ] No restart loops
+
+Check:
+
+```bash
+kubectl get pods -n prod
+```
+
+---
+
+## Logs
+
+* [ ] Application logs healthy
+* [ ] No critical errors
+
+---
+
+## Alerts
+
+* [ ] Monitoring alerts active
+* [ ] Notification channels active
+
+---
+
+# 9. Rollback Readiness
+
+Before deployment:
+
+* [ ] Previous image tags documented
+* [ ] Previous GitOps commit documented
+* [ ] Rollback approvers identified
+* [ ] Rollback procedure documented
+
+Example:
+
+```bash
+git revert <commit>
+```
+
+or
+
+```bash
+argocd sync previous-version
+```
+
+---
+
+# 10. Go-Live Approval
+
+| Team            | Approval |
+| --------------- | -------- |
+| Development     | ⬜        |
+| DevOps          | ⬜        |
+| QA              | ⬜        |
+| Security        | ⬜        |
+| Product Owner   | ⬜        |
+| Release Manager | ⬜        |
+
+---
+
+# 11. Post Go-Live Monitoring (24 Hours)
+
+### First 30 Minutes
+
+* [ ] Login success rate monitored
+* [ ] API response times monitored
+* [ ] Error rates monitored
+
+### First 2 Hours
+
+* [ ] No Sev1 incidents
+* [ ] No Sev2 incidents
+
+### First Day
+
+* [ ] Daily health check completed
+* [ ] User issues reviewed
+
+---
+
+### For your story, I would deliver **three artifacts**:
+
+1. **Production Rollout Checklist (Excel/Confluence)**
+2. **Production Deployment Runbook (step-by-step commands)**
+3. **Rollback Runbook**
+
+That combination usually satisfies enterprise production-readiness requirements and is much stronger than a simple checklist document.
