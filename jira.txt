@@ -1,39 +1,25 @@
-Here's a professional email you can send to the MICS team.
+Hi Team,
 
-Hello Team,
+As part of the GitOps repository restructuring, the **VirtualService manifests have been moved from the `services` directory to the `networking` directory** in the MICS GitOps repository.
 
-As part of the ongoing MICS environment standardization effort, the domain hostnames for the DEV, QA, and UAT environments have been updated.
+Please update any references, documentation, onboarding guides, or future changes accordingly and use the new location going forward.
 
-Please use the new URLs below going forward and update any bookmarks, documentation, automation scripts, configuration files, test cases, monitoring tools, or references that currently point to the old URLs.
+**Old Path:**
 
-**Updated Environment URLs**
+```text
+<OLD_PATH>
+```
 
-| Environment | New URL   |
-| ----------- | --------- |
-| DEV         | <DEV_URL> |
-| QA          | <QA_URL>  |
-| UAT         | <UAT_URL> |
+**New Path:**
 
-**Action Required**
+```text
+<NEW_PATH>
+```
 
-* Update any saved bookmarks and environment references.
-* Review application configurations, test scripts, and documentation for any hardcoded URLs.
-* Use the new URLs for all future testing, validation, and integration activities.
+The purpose of this change is to centralize networking-related resources (VirtualServices, Gateways, etc.) under a dedicated networking structure and keep them separate from application deployment manifests.
 
-If you encounter any issues accessing the environments or identify any dependencies still pointing to the previous hostnames, please reach out to the MICS team.
+Please reach out if you have any questions or if you notice any references still pointing to the old location.
 
-Thank you for your cooperation and support.
+Thank you.
 
-Regards,
-
-<Your Name>
-MICS Team
-
-### Subject Alternatives
-
-* **MICS Environment Hostname Update – DEV, QA & UAT**
-* **Action Required: Updated MICS Environment URLs**
-* **MICS URL Migration Completed – Please Update References**
-* **New MICS Environment URLs for DEV, QA and UAT**
-
-If the old URLs are being retired on a specific date, I can also provide a stronger version mentioning the cutoff date and impact after migration.
+If you're sharing actual paths, replace the placeholders with the exact old and new paths before posting.
