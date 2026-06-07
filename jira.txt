@@ -1,25 +1,63 @@
-Hi Team,
+For a larger audience (developers, testers, business users), keep it factual and avoid too much technical detail.
 
-As part of the GitOps repository restructuring, the **VirtualService manifests have been moved from the `services` directory to the `networking` directory** in the MICS GitOps repository.
+**DEV URL Update**
 
-Please update any references, documentation, onboarding guides, or future changes accordingly and use the new location going forward.
+The hostname update request has been completed for both DEV and QA environments.
 
-**Old Path:**
+As part of validation, we confirmed that the QA environment is functioning as expected and users can successfully authenticate and access the application using the new QA URL.
 
-```text
-<OLD_PATH>
-```
+For DEV, all MICS-side configuration updates (Gateway, VirtualService, application configuration, and routing) have been verified and are aligned with the working QA setup. Based on our analysis, the DEV authentication flow is still referencing the previous redirect URI configuration in Ping, whereas the QA redirect URI has already been updated to the new hostname.
 
-**New Path:**
+As a result:
 
-```text
-<NEW_PATH>
-```
+* ✅ QA is fully accessible using the new hostname.
+* ⚠️ DEV is currently unavailable after authentication due to the redirect URI mismatch.
+* ✅ No additional code changes are currently identified on the MICS side.
+* ⏳ Waiting for the DEV Ping redirect URI update to be completed.
 
-The purpose of this change is to centralize networking-related resources (VirtualServices, Gateways, etc.) under a dedicated networking structure and keep them separate from application deployment manifests.
+Once the DEV redirect URI is updated, the DEV portal is expected to become accessible without requiring any additional application deployment.
 
-Please reach out if you have any questions or if you notice any references still pointing to the old location.
+Or a shorter version:
 
-Thank you.
+**DEV/QA Hostname Migration Status**
 
-If you're sharing actual paths, replace the placeholders with the exact old and new paths before posting.
+The new hostname updates have been successfully applied for both DEV and QA.
+
+QA validation completed successfully and the portal is accessible using the new URL.
+
+For DEV, our validation indicates that the new hostname configuration is in place; however, the Ping redirect URI still appears to be pointing to the previous DEV configuration. This is causing authentication requests to fail after redirection.
+
+Current status:
+
+* QA: ✅ Working with new hostname
+* DEV: ⚠️ Awaiting Ping redirect URI update
+* No additional code changes or redeployment are currently expected from the MICS side
+
+We will provide another update once the Ping configuration change is completed.
+
+
+
+
+
+
+
+
+===================================================================
+
+This is probably better for your lead—short, evidence-based, and focused on the likely root cause.
+
+Quick update on the DEV URL issue:
+
+I compared the DEV configuration against QA and verified that the Gateway, VirtualService, and application configurations are aligned with the QA setup. I also validated the UI service through port-forwarding, and the application loads successfully.
+
+During testing, I observed that the authentication flow is still redirecting to the old Ping authorization URL. Based on the network traces and port-forwarding validation, my current suspicion is that the DEV redirect URI/client configuration in Ping has not yet been updated to reflect the new DEV hostname.
+
+At this point, I don't see any code or deployment issues on the MICS side. Once the Ping redirect URI is updated, the DEV portal should come up without any additional code changes. I also don't anticipate a redeployment being required since the latest configurations are already in place.
+
+An even shorter version if you're sending it directly to your lead in Teams:
+
+I validated the DEV setup against QA and all MICS-side configurations (Gateway, VirtualService, and app configs) appear to be correct. I also tested via port-forwarding and confirmed the UI loads successfully.
+
+The authentication flow still appears to be redirecting to the old Ping authorization URL, so I suspect the DEV redirect URI/client configuration in Ping has not been updated yet.
+
+Based on the current analysis, I don't see any additional code changes or redeployment needed from our side. Once the Ping configuration is updated, the DEV portal should start working as expected.
