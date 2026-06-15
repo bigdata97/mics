@@ -1,10 +1,19 @@
-gcloud iam workload-identity-pools list \
-  --location=global \
-  --project=465040115566
+- name: Run kubectl command
+        env:
+          KUBECTL_COMMAND: ${{ github.event.inputs.kubectl_command }}
+        run: |
+          set -euo pipefail
 
-  gcloud iam workload-identity-pools providers list \
-  --workload-identity-pool=wif-pool-github-prod-v2 \
-  --location=global \
-  --project=465040115566
+          echo "------------------------------------------------------------"
+          echo "Running kubectl command in PROD"
+          echo "------------------------------------------------------------"
+          echo "$KUBECTL_COMMAND"
+          echo "------------------------------------------------------------"
+
+          eval "$KUBECTL_COMMAND"
+
+          echo "------------------------------------------------------------"
+          echo "✅ kubectl command completed"
+          echo "------------------------------------------------------------"
 
   
