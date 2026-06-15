@@ -1,0 +1,10 @@
+gcloud iam workload-identity-pools list \
+  --location=global \
+  --project=465040115566
+
+  gcloud iam workload-identity-pools providers list \
+  --workload-identity-pool=wif-pool-github-prod-v2 \
+  --location=global \
+  --project=465040115566
+
+  
