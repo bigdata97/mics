@@ -1,6 +1,30 @@
-- name: SPRING_CLOUD_VAULT_KV_PROFILE_SEPARATOR
-  value: "/"
-- name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_VAULT
-  value: DEBUG
-- name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_VAULT
-  value: DEBUG
+
+spring:
+  config:
+    import: vault://
+
+  cloud:
+    vault:
+      enabled: true
+
+      uri: ${VAULT_URL}
+
+      authentication: KUBERNETES
+
+      kubernetes:
+        role: mics-logo-service-uat
+        kubernetes-path: kubernetes
+
+      kv:
+        enabled: true
+
+        backend: kv-v2/app/k8s/hcb-nonprod-mics/mics-uat-use4/mics-nonprod-uat
+
+        application-name: mongodb
+
+      fail-fast: true
+
+spring:
+  data:
+    mongodb:
+      uri: ${uri}
