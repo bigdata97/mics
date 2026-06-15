@@ -1,30 +1,295 @@
+name: Delete PROD Kubernetes Resources
 
-spring:
-  config:
-    import: vault://
+on:
+workflow_dispatch:
+inputs:
+application_name:
+description: "ArgoCD Application name to delete. Leave blank if not needed."
+required: false
+type: string
 
-  cloud:
-    vault:
-      enabled: true
+```
+  application_namespace:
+    description: "Namespace of ArgoCD Application. Example: argocd. Required only if application_name is provided."
+    required: false
+    type: string
 
-      uri: ${VAULT_URL}
+  deployment_name:
+    description: "Kubernetes Deployment name to delete. Leave blank if not needed."
+    required: false
+    type: string
 
-      authentication: KUBERNETES
+  deployment_namespace:
+    description: "Namespace of Deployment. Required only if deployment_name is provided."
+    required: false
+    type: string
 
-      kubernetes:
-        role: mics-logo-service-uat
-        kubernetes-path: kubernetes
+  service_name:
+    description: "Kubernetes Service name to delete. Leave blank if not needed."
+    required: false
+    type: string
 
-      kv:
-        enabled: true
+  service_namespace:
+    description: "Namespace of Service. Required only if service_name is provided."
+    required: false
+    type: string
+```
 
-        backend: kv-v2/app/k8s/hcb-nonprod-mics/mics-uat-use4/mics-nonprod-uat
+permissions:
+contents: read
+id-token: write
 
-        application-name: mongodb
+jobs:
+delete-prod-resources:
+runs-on: self-hosted
+environment: prod-approval-reqd
 
-      fail-fast: true
+```
+steps:
+  # ------------------------------------------------------------
+  # Checkout
+  # ------------------------------------------------------------
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-spring:
-  data:
-    mongodb:
-      uri: ${uri}
+  # ------------------------------------------------------------
+  # Authenticate to GCP using OIDC + WIF
+  # ------------------------------------------------------------
+  - name: Authenticate to Google Cloud PROD
+    uses: google-github-actions/auth@ba79af03959ebeac9769e648f473a284504d9193
+    with:
+      workload_identity_provider: projects/465040115566/locations/global/workloadIdentityPools/wif-pool-github-prod-v2/providers/github-repo
+      service_account: infra-admin@hcb-prod-mics.iam.gserviceaccount.com
+
+  # ------------------------------------------------------------
+  # Verify identity
+  # ------------------------------------------------------------
+  - name: Verify active identity
+    run: |
+      gcloud auth list
+      gcloud config get-value account
+
+  # ------------------------------------------------------------
+  # Set PROD project
+  # ------------------------------------------------------------
+  - name: Set GCP project
+    run: |
+      gcloud config set project hcb-prod-mics
+
+  # ------------------------------------------------------------
+  # Safety check - ensure PROD
+  # ------------------------------------------------------------
+  - name: Safety check - ensure PROD
+    run: |
+      ACTIVE_PROJECT=$(gcloud config get-value project)
+      if [[ "$ACTIVE_PROJECT" != "hcb-prod-mics" ]]; then
+        echo "❌ Not in PROD project. Active project: $ACTIVE_PROJECT"
+        exit 1
+      fi
+
+      echo "✅ Confirmed PROD project: $ACTIVE_PROJECT"
+
+  # ------------------------------------------------------------
+  # Get GKE credentials
+  # ------------------------------------------------------------
+  - name: Get GKE credentials
+    run: |
+      gcloud container clusters get-credentials mics-prod-use4 \
+        --region us-east4 \
+        --project hcb-prod-mics
+
+  # ------------------------------------------------------------
+  # Validate inputs
+  # ------------------------------------------------------------
+  - name: Validate inputs
+    env:
+      APPLICATION_NAME: ${{ github.event.inputs.application_name }}
+      APPLICATION_NAMESPACE: ${{ github.event.inputs.application_namespace }}
+      DEPLOYMENT_NAME: ${{ github.event.inputs.deployment_name }}
+      DEPLOYMENT_NAMESPACE: ${{ github.event.inputs.deployment_namespace }}
+      SERVICE_NAME: ${{ github.event.inputs.service_name }}
+      SERVICE_NAMESPACE: ${{ github.event.inputs.service_namespace }}
+    run: |
+      set -euo pipefail
+
+      HAS_INPUT=false
+
+      if [[ -n "$APPLICATION_NAME" || -n "$APPLICATION_NAMESPACE" ]]; then
+        if [[ -z "$APPLICATION_NAME" || -z "$APPLICATION_NAMESPACE" ]]; then
+          echo "❌ Both application_name and application_namespace are required to delete ArgoCD Application."
+          exit 1
+        fi
+        HAS_INPUT=true
+      fi
+
+      if [[ -n "$DEPLOYMENT_NAME" || -n "$DEPLOYMENT_NAMESPACE" ]]; then
+        if [[ -z "$DEPLOYMENT_NAME" || -z "$DEPLOYMENT_NAMESPACE" ]]; then
+          echo "❌ Both deployment_name and deployment_namespace are required to delete Deployment."
+          exit 1
+        fi
+        HAS_INPUT=true
+      fi
+
+      if [[ -n "$SERVICE_NAME" || -n "$SERVICE_NAMESPACE" ]]; then
+        if [[ -z "$SERVICE_NAME" || -z "$SERVICE_NAMESPACE" ]]; then
+          echo "❌ Both service_name and service_namespace are required to delete Service."
+          exit 1
+        fi
+        HAS_INPUT=true
+      fi
+
+      if [[ "$HAS_INPUT" == "false" ]]; then
+        echo "❌ No resource details provided. Provide at least one resource name with its namespace."
+        exit 1
+      fi
+
+      echo "✅ Input validation completed."
+
+  # ------------------------------------------------------------
+  # Preview resources before deletion
+  # ------------------------------------------------------------
+  - name: Preview resources before deletion
+    env:
+      APPLICATION_NAME: ${{ github.event.inputs.application_name }}
+      APPLICATION_NAMESPACE: ${{ github.event.inputs.application_namespace }}
+      DEPLOYMENT_NAME: ${{ github.event.inputs.deployment_name }}
+      DEPLOYMENT_NAMESPACE: ${{ github.event.inputs.deployment_namespace }}
+      SERVICE_NAME: ${{ github.event.inputs.service_name }}
+      SERVICE_NAMESPACE: ${{ github.event.inputs.service_namespace }}
+    run: |
+      set -euo pipefail
+
+      echo "------------------------------------------------------------"
+      echo "Previewing resources before deletion"
+      echo "------------------------------------------------------------"
+
+      if [[ -n "$APPLICATION_NAME" ]]; then
+        echo "Checking ArgoCD Application: $APPLICATION_NAME in namespace: $APPLICATION_NAMESPACE"
+        kubectl get application "$APPLICATION_NAME" -n "$APPLICATION_NAMESPACE" || true
+      fi
+
+      if [[ -n "$DEPLOYMENT_NAME" ]]; then
+        echo "Checking Deployment: $DEPLOYMENT_NAME in namespace: $DEPLOYMENT_NAMESPACE"
+        kubectl get deployment "$DEPLOYMENT_NAME" -n "$DEPLOYMENT_NAMESPACE" || true
+      fi
+
+      if [[ -n "$SERVICE_NAME" ]]; then
+        echo "Checking Service: $SERVICE_NAME in namespace: $SERVICE_NAMESPACE"
+        kubectl get service "$SERVICE_NAME" -n "$SERVICE_NAMESPACE" || true
+      fi
+
+  # ------------------------------------------------------------
+  # Delete ArgoCD Application if provided
+  # ------------------------------------------------------------
+  - name: Delete ArgoCD Application
+    if: ${{ github.event.inputs.application_name != '' }}
+    env:
+      APPLICATION_NAME: ${{ github.event.inputs.application_name }}
+      APPLICATION_NAMESPACE: ${{ github.event.inputs.application_namespace }}
+    run: |
+      set -euo pipefail
+
+      echo "Deleting ArgoCD Application: $APPLICATION_NAME from namespace: $APPLICATION_NAMESPACE"
+
+      kubectl delete application "$APPLICATION_NAME" \
+        -n "$APPLICATION_NAMESPACE" \
+        --ignore-not-found=true
+
+      echo "✅ ArgoCD Application delete command completed."
+
+  # ------------------------------------------------------------
+  # Delete Kubernetes Deployment if provided
+  # ------------------------------------------------------------
+  - name: Delete Kubernetes Deployment
+    if: ${{ github.event.inputs.deployment_name != '' }}
+    env:
+      DEPLOYMENT_NAME: ${{ github.event.inputs.deployment_name }}
+      DEPLOYMENT_NAMESPACE: ${{ github.event.inputs.deployment_namespace }}
+    run: |
+      set -euo pipefail
+
+      echo "Deleting Deployment: $DEPLOYMENT_NAME from namespace: $DEPLOYMENT_NAMESPACE"
+
+      kubectl delete deployment "$DEPLOYMENT_NAME" \
+        -n "$DEPLOYMENT_NAMESPACE" \
+        --ignore-not-found=true
+
+      echo "✅ Deployment delete command completed."
+
+  # ------------------------------------------------------------
+  # Delete Kubernetes Service if provided
+  # ------------------------------------------------------------
+  - name: Delete Kubernetes Service
+    if: ${{ github.event.inputs.service_name != '' }}
+    env:
+      SERVICE_NAME: ${{ github.event.inputs.service_name }}
+      SERVICE_NAMESPACE: ${{ github.event.inputs.service_namespace }}
+    run: |
+      set -euo pipefail
+
+      echo "Deleting Service: $SERVICE_NAME from namespace: $SERVICE_NAMESPACE"
+
+      kubectl delete service "$SERVICE_NAME" \
+        -n "$SERVICE_NAMESPACE" \
+        --ignore-not-found=true
+
+      echo "✅ Service delete command completed."
+
+  # ------------------------------------------------------------
+  # Final summary
+  # ------------------------------------------------------------
+  - name: Final summary
+    env:
+      APPLICATION_NAME: ${{ github.event.inputs.application_name }}
+      APPLICATION_NAMESPACE: ${{ github.event.inputs.application_namespace }}
+      DEPLOYMENT_NAME: ${{ github.event.inputs.deployment_name }}
+      DEPLOYMENT_NAMESPACE: ${{ github.event.inputs.deployment_namespace }}
+      SERVICE_NAME: ${{ github.event.inputs.service_name }}
+      SERVICE_NAMESPACE: ${{ github.event.inputs.service_namespace }}
+    run: |
+      echo "------------------------------------------------------------"
+      echo "PROD delete workflow completed"
+      echo "------------------------------------------------------------"
+
+      if [[ -n "$APPLICATION_NAME" ]]; then
+        echo "ArgoCD Application: $APPLICATION_NAME | Namespace: $APPLICATION_NAMESPACE"
+      fi
+
+      if [[ -n "$DEPLOYMENT_NAME" ]]; then
+        echo "Deployment: $DEPLOYMENT_NAME | Namespace: $DEPLOYMENT_NAMESPACE"
+      fi
+
+      if [[ -n "$SERVICE_NAME" ]]; then
+        echo "Service: $SERVICE_NAME | Namespace: $SERVICE_NAMESPACE"
+      fi
+```
+
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Namespace"
+        required: true
+
+      application_name:
+        description: "ArgoCD Application Name"
+        required: true
+
+      deployment_name:
+        description: "Deployment Name"
+        required: true
+
+      service_name:
+        description: "Service Name"
+        required: true
+
+kubectl delete application $APPLICATION_NAME -n argocd --ignore-not-found=true
+
+kubectl delete deployment $DEPLOYMENT_NAME \
+  -n $NAMESPACE \
+  --ignore-not-found=true
+
+kubectl delete service $SERVICE_NAME \
+  -n $NAMESPACE \
+  --ignore-not-found=true
