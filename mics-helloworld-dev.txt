@@ -1,16 +1,38 @@
-Manager: We’ve really appreciated your work, and we’d like to explore converting you to a full-time employee at CVS. What are your thoughts?
+Run this with your **prod project id** and **infra SA email**:
 
-You: First of all, I really appreciate the opportunity and the trust from the team. I’ve genuinely enjoyed working with everyone here.
+```bash
+PROD_PROJECT_ID="hcb-prod-mics"
+INFRA_SA="infra-admin@hcb-prod-mics.iam.gserviceaccount.com"
 
-You: At this moment though, I’m more comfortable continuing in my current engagement model with my employer. Since I’ve been with them for several years and my H1B setup is already established there, I prefer maintaining that stability for now.
+gcloud projects get-iam-policy "$PROD_PROJECT_ID" \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:serviceAccount:$INFRA_SA" \
+  --format="table(bindings.role)"
+```
 
-Manager: Is there any concern with CVS or the role itself?
+If your infra SA email is different, replace it.
 
-You: Not at all. Honestly, I’ve had a very positive experience with the team and the work. This is more about my current professional and personal situation rather than anything related to CVS.
+To see full details including IAM conditions:
 
-Manager: Would you be open to reconsidering in the future?
+```bash
+gcloud projects get-iam-policy "$PROD_PROJECT_ID" \
+  --flatten="bindings[].members" \
+  --filter="bindings.members:serviceAccount:$INFRA_SA" \
+  --format="yaml(bindings.role,bindings.members,bindings.condition)"
+```
 
-You: Definitely. I’m always open to future discussions, but at this point I’d prefer continuing as a contractor while still contributing fully to the team and ongoing initiatives.
+Also check who can impersonate that infra SA:
 
+```bash
+gcloud iam service-accounts get-iam-policy "$INFRA_SA" \
+  --project="$PROD_PROJECT_ID"
+```
 
-“Thank you, I really appreciate the opportunity and the confidence from the team. At this point, because of my long-standing H1B setup and the stability I currently have with my employer, I’d prefer to continue in the current contractor model for now. I’ve genuinely enjoyed working with CVS and would definitely like to continue supporting the team.”
+For folder/org inherited roles, project policy alone may not show everything. Use this too:
+
+```bash
+gcloud asset search-all-iam-policies \
+  --scope="projects/$PROD_PROJECT_ID" \
+  --query="policy:$INFRA_SA" \
+  --format="table(resource,policy.bindings.role)"
+```
