@@ -1,19 +1,16 @@
-- name: Run kubectl command
-        env:
-          KUBECTL_COMMAND: ${{ github.event.inputs.kubectl_command }}
-        run: |
-          set -euo pipefail
+Manager: We’ve really appreciated your work, and we’d like to explore converting you to a full-time employee at CVS. What are your thoughts?
 
-          echo "------------------------------------------------------------"
-          echo "Running kubectl command in PROD"
-          echo "------------------------------------------------------------"
-          echo "$KUBECTL_COMMAND"
-          echo "------------------------------------------------------------"
+You: First of all, I really appreciate the opportunity and the trust from the team. I’ve genuinely enjoyed working with everyone here.
 
-          eval "$KUBECTL_COMMAND"
+You: At this moment though, I’m more comfortable continuing in my current engagement model with my employer. Since I’ve been with them for several years and my H1B setup is already established there, I prefer maintaining that stability for now.
 
-          echo "------------------------------------------------------------"
-          echo "✅ kubectl command completed"
-          echo "------------------------------------------------------------"
+Manager: Is there any concern with CVS or the role itself?
 
-  
+You: Not at all. Honestly, I’ve had a very positive experience with the team and the work. This is more about my current professional and personal situation rather than anything related to CVS.
+
+Manager: Would you be open to reconsidering in the future?
+
+You: Definitely. I’m always open to future discussions, but at this point I’d prefer continuing as a contractor while still contributing fully to the team and ongoing initiatives.
+
+
+“Thank you, I really appreciate the opportunity and the confidence from the team. At this point, because of my long-standing H1B setup and the stability I currently have with my employer, I’d prefer to continue in the current contractor model for now. I’ve genuinely enjoyed working with CVS and would definitely like to continue supporting the team.”
