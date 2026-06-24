@@ -1,19 +1,7 @@
 Hi Team,
 
-We have completed the automated workflow to create the required Vault Secret Engine and have already raised the corresponding Pull Request with the necessary details.
+We are currently blocked with the Vault integration in the QA and UAT clusters because the SecretStore resource is not available in these environments.
 
-As the next step in the onboarding process, we require the Vault role for Kubernetes JWT authentication to be created so that our application can authenticate with Vault and access the required secrets.
+Although the ExternalSecret resources have been created, they reference a SecretStore to establish the connection with Vault. Since the referenced SecretStore is missing, the ExternalSecret controller is unable to retrieve the secrets from Vault and consequently cannot create the corresponding Kubernetes Secrets.
 
-Could you please assist us with creating the Vault role and binding it to the appropriate Kubernetes Service Account and namespace?
-
-Please let us know if you require any additional information, such as:
-
-Kubernetes cluster details
-Namespace
-Service Account name
-Vault policy name
-JWT issuer or any other configuration details
-
-We appreciate your guidance and support in completing this setup.
-
-Thank you,
+Could someone please help verify why the SecretStore is not present in the QA and UAT clusters, or assist in creating the required SecretStore resources? This will unblock the Vault integration for these environments.
