@@ -1,7 +1,18 @@
 Hi Team,
 
-We are currently blocked with the Vault integration in the QA and UAT clusters because the SecretStore resource is not available in these environments.
+I would like to follow up on the request below regarding the missing SecretStore resources for the QA and UAT clusters.
 
-Although the ExternalSecret resources have been created, they reference a SecretStore to establish the connection with Vault. Since the referenced SecretStore is missing, the ExternalSecret controller is unable to retrieve the secrets from Vault and consequently cannot create the corresponding Kubernetes Secrets.
+This issue has been pending for over a week, and despite reaching out through multiple support channels, we have not yet been able to identify the owning team or receive a resolution.
 
-Could someone please help verify why the SecretStore is not present in the QA and UAT clusters, or assist in creating the required SecretStore resources? This will unblock the Vault integration for these environments.
+As a result, our Vault integration remains blocked in the QA and UAT environments. Although the Vault secret engines have been provisioned, the corresponding SecretStore resources are still unavailable. Without the SecretStore, the ExternalSecret controller cannot establish connectivity with Vault to synchronize secrets into Kubernetes, preventing us from proceeding with our application validation and testing activities.
+
+Could someone please help identify the appropriate owning team or assist with provisioning the required SecretStore resources? If any additional information is needed from our side, we will provide it promptly.
+
+@<Manager Name>, I have included you on this thread to seek your assistance in identifying the appropriate team or point of contact who can help drive this issue to resolution, as this dependency is currently impacting our delivery timeline.
+
+We would greatly appreciate any update on the ownership, current status, or estimated timeline for resolution.
+
+Thank you for your support.
+
+Thanks & Regards,
+Eswara
