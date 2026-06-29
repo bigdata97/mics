@@ -1,37 +1,11 @@
-Review the missing SecretStore resources in the QA and UAT clusters impacting Vault connectivity. Identify the ownership, understand the current status, and align on the next steps to resolve the issue and unblock validation activities.
+for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo ==================== %s ==================== && kubectl get secret %s -n mics-nonprod-qa -o yaml | powershell -Command "$in=$false; $input | %% { if($_ -match '^data:$'){ $in=$true; $_ } elseif($in -and $_ -match '^[^ ]'){ $in=$false } elseif($in){ $_ } }"
 
-Here are a few professional meeting subject options, ordered from most recommended to more urgent.
 
-Option 1 (Recommended)
+for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo ==================== %s ==================== && kubectl get secret %s -n mics-nonprod-qa -o go-template="{{range $k,$v := .data}}{{$k}}: {{base64decode $v}}{{\"\n\"}}{{end}}"
 
-Vault Integration Blocker – Missing SecretStore Resources in QA & UAT
 
-Option 2
 
-Discussion: Missing SecretStore Resources in QA & UAT Clusters
 
-Option 3
+for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo. && echo ================================================== && echo Secret: %s && echo ================================================== && kubectl get secret %s -n mics-nonprod-qa -o go-template="{{range $k,$v := .data}}Key: {{$k}}{{\"\n\"}}Encoded: {{$v}}{{\"\n\"}}Decoded: {{base64decode $v}}{{\"\n\n\"}}{{end}}"
 
-QA & UAT Vault Connectivity Issue – SecretStore Provisioning Discussion
 
-Option 4
-
-Action Required: Missing SecretStore Resources Blocking QA & UAT Validation
-
-Option 5
-
-Vault SecretStore Provisioning – QA & UAT Cluster Blocker
-
-Option 6 (More management-oriented)
-
-Ownership & Resolution Discussion – Missing SecretStore Resources in QA & UAT
-
-Option 7 (If senior managers are attending)
-
-Critical Blocker Discussion – SecretStore Provisioning for QA & UAT Vault Integration
-
-My recommendation
-
-Since you're inviting multiple infrastructure teams and your manager, I'd use:
-
-Vault Integration Blocker – Missing SecretStore Resources in QA & UAT
