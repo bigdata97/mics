@@ -9,3 +9,10 @@ for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].me
 for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo. && echo ================================================== && echo Secret: %s && echo ================================================== && kubectl get secret %s -n mics-nonprod-qa -o go-template="{{range $k,$v := .data}}Key: {{$k}}{{\"\n\"}}Encoded: {{$v}}{{\"\n\"}}Decoded: {{base64decode $v}}{{\"\n\n\"}}{{end}}"
 
 
+kubectl get secrets -n mics-nonprod-qa -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | while read secret; do
+    echo "=================================================="
+    echo "Secret: $secret"
+    echo "=================================================="
+    kubectl get secret "$secret" -n mics-nonprod-qa -o jsonpath='{.data}' \
+    | jq -r 'to_entries[] | "Key: \(.key)\nEncoded: \(.value)\nDecoded: \(.value | @base64d)\n"'
+done
