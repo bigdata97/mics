@@ -1,24 +1,19 @@
-Based on your analysis, don't ask them to "create a SecretStore" immediately. Instead, ask whether the existing `ClusterSecretStore` can be used. This gives them the opportunity to suggest the supported approach.
+Hi Team,
 
-Here's a professional Slack message:
+We are currently blocked on enabling Vault integration for the MICS QA (mics-nonprod-qa) and UAT (mics-nonprod-uat) namespaces.
 
-> Hi Team,
->
-> We are currently working on enabling Vault integration for the **MICS UAT** namespace (`mics-nonprod-uat`).
->
-> In the DEV environment, we have a namespace-level `SecretStore` (`namespace-secretstore`) that our `ExternalSecret` references to retrieve secrets from Vault. However, there is no `SecretStore` resource available in the UAT namespace.
->
-> We do see the following `ClusterSecretStore` resources available:
->
-> * `platform-services-clustersecretstore`
-> * `cluster-scope-clustersecretstore`
->
-> Could you please confirm whether either of these `ClusterSecretStore` resources can be used for MICS application secrets in UAT, or if a namespace-level `SecretStore` similar to DEV needs to be provisioned?
->
-> We are currently blocked on creating Kubernetes Secrets from Vault, so any guidance would be greatly appreciated.
+In the DEV environment, our ExternalSecret references a namespace-level SecretStore (namespace-secretstore), which successfully retrieves secrets from Vault and creates the corresponding Kubernetes Secrets.
 
-If you want to show that you've already investigated, you can add this at the end:
+However, the same namespace-level SecretStore resource is not available in either the QA or UAT namespaces.
 
-> I compared the DEV `SecretStore` with the available UAT `ClusterSecretStore` configurations and noticed that the Vault paths and roles are different, so I wanted to confirm the recommended approach before making any changes.
+As part of our investigation, we temporarily updated the ExternalSecret in UAT to reference the available cluster-scope-clustersecretstore. While the request was able to reach Vault, it failed with the following authorization error:
 
-This demonstrates that you've done your homework and are asking a specific technical question rather than just reporting a problem.
+403 Permission Denied
+cannot read secret data from Vault
+permission denied
+
+This indicates that the existing ClusterSecretStore does not have access to our application's Vault secret path and therefore cannot be used for our application secrets.
+
+Could you please help provision the namespace-level SecretStore for both the mics-nonprod-qa and mics-nonprod-uat namespaces, similar to the DEV environment, or trigger the corresponding workflow if it has not yet been executed?
+
+We are currently blocked on synchronizing secrets from Vault into Kubernetes for both environments, which is preventing our application validation and testing activities. We would appreciate your support in resolving this at the earliest.
