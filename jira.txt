@@ -1,21 +1,7 @@
-Hi Team,
+Investigated the Snyk scan limit issue and documented the recommended mitigation strategy. The proposed solution includes:
 
-We are currently blocked on enabling Vault integration for the MICS QA (mics-nonprod-qa) and UAT (mics-nonprod-uat) namespaces.
+Introducing GitHub Actions concurrency to prevent duplicate Snyk scans.
+Optimizing workflow trigger configuration to eliminate redundant executions.
+Validating the Snyk token and organization configuration used by the GitHub Actions workflows.
 
-In the DEV environment, our ExternalSecret references a namespace-level SecretStore (namespace-secretstore), which successfully retrieves secrets from Vault and creates the corresponding Kubernetes Secrets.
-
-However, the same namespace-level SecretStore resource is not available in either the QA or UAT namespaces.
-
-As part of our investigation, we temporarily updated the ExternalSecret in UAT to reference the available cluster-scope-clustersecretstore. While the request was able to reach Vault, it failed with the following authorization error:
-
-403 Permission Denied
-cannot read secret data from Vault
-permission denied
-
-This confirms that the existing ClusterSecretStore does not have access to our application's Vault secret path and therefore cannot be used for our application secrets.
-
-We have already reached out to the Vault team, who advised us to contact the Compute team regarding the provisioning of the namespace-level SecretStore. However, after discussing with the Compute team, we understand that they do not own the workflow responsible for creating this resource. At this point, we are unable to identify the appropriate owning team for provisioning the SecretStore.
-
-Could someone please help identify the correct owning team or assist in provisioning the namespace-level SecretStore for both the mics-nonprod-qa and mics-nonprod-uat namespaces (similar to the DEV environment), or trigger the corresponding workflow if it has not yet been executed?
-
-We are currently blocked on synchronizing secrets from Vault into Kubernetes for both environments, which is preventing our application validation and testing activities. We would greatly appreciate your support in helping us resolve this dependency at the earliest.
+These changes are expected to reduce Snyk scan limit failures and improve CI pipeline stability.
