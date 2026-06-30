@@ -1,18 +1,24 @@
-for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo ==================== %s ==================== && kubectl get secret %s -n mics-nonprod-qa -o yaml | powershell -Command "$in=$false; $input | %% { if($_ -match '^data:$'){ $in=$true; $_ } elseif($in -and $_ -match '^[^ ]'){ $in=$false } elseif($in){ $_ } }"
+Based on your analysis, don't ask them to "create a SecretStore" immediately. Instead, ask whether the existing `ClusterSecretStore` can be used. This gives them the opportunity to suggest the supported approach.
 
+Here's a professional Slack message:
 
-for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo ==================== %s ==================== && kubectl get secret %s -n mics-nonprod-qa -o go-template="{{range $k,$v := .data}}{{$k}}: {{base64decode $v}}{{\"\n\"}}{{end}}"
+> Hi Team,
+>
+> We are currently working on enabling Vault integration for the **MICS UAT** namespace (`mics-nonprod-uat`).
+>
+> In the DEV environment, we have a namespace-level `SecretStore` (`namespace-secretstore`) that our `ExternalSecret` references to retrieve secrets from Vault. However, there is no `SecretStore` resource available in the UAT namespace.
+>
+> We do see the following `ClusterSecretStore` resources available:
+>
+> * `platform-services-clustersecretstore`
+> * `cluster-scope-clustersecretstore`
+>
+> Could you please confirm whether either of these `ClusterSecretStore` resources can be used for MICS application secrets in UAT, or if a namespace-level `SecretStore` similar to DEV needs to be provisioned?
+>
+> We are currently blocked on creating Kubernetes Secrets from Vault, so any guidance would be greatly appreciated.
 
+If you want to show that you've already investigated, you can add this at the end:
 
+> I compared the DEV `SecretStore` with the available UAT `ClusterSecretStore` configurations and noticed that the Vault paths and roles are different, so I wanted to confirm the recommended approach before making any changes.
 
-
-for /f %s in ('kubectl get secrets -n mics-nonprod-qa -o jsonpath="{.items[*].metadata.name}"') do @echo. && echo ================================================== && echo Secret: %s && echo ================================================== && kubectl get secret %s -n mics-nonprod-qa -o go-template="{{range $k,$v := .data}}Key: {{$k}}{{\"\n\"}}Encoded: {{$v}}{{\"\n\"}}Decoded: {{base64decode $v}}{{\"\n\n\"}}{{end}}"
-
-
-kubectl get secrets -n mics-nonprod-qa -o jsonpath='{.items[*].metadata.name}' | tr ' ' '\n' | while read secret; do
-    echo "=================================================="
-    echo "Secret: $secret"
-    echo "=================================================="
-    kubectl get secret "$secret" -n mics-nonprod-qa -o jsonpath='{.data}' \
-    | jq -r 'to_entries[] | "Key: \(.key)\nEncoded: \(.value)\nDecoded: \(.value | @base64d)\n"'
-done
+This demonstrates that you've done your homework and are asking a specific technical question rather than just reporting a problem.
