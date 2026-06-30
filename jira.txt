@@ -12,8 +12,10 @@ As part of our investigation, we temporarily updated the ExternalSecret in UAT t
 cannot read secret data from Vault
 permission denied
 
-This indicates that the existing ClusterSecretStore does not have access to our application's Vault secret path and therefore cannot be used for our application secrets.
+This confirms that the existing ClusterSecretStore does not have access to our application's Vault secret path and therefore cannot be used for our application secrets.
 
-Could you please help provision the namespace-level SecretStore for both the mics-nonprod-qa and mics-nonprod-uat namespaces, similar to the DEV environment, or trigger the corresponding workflow if it has not yet been executed?
+We have already reached out to the Vault team, who advised us to contact the Compute team regarding the provisioning of the namespace-level SecretStore. However, after discussing with the Compute team, we understand that they do not own the workflow responsible for creating this resource. At this point, we are unable to identify the appropriate owning team for provisioning the SecretStore.
 
-We are currently blocked on synchronizing secrets from Vault into Kubernetes for both environments, which is preventing our application validation and testing activities. We would appreciate your support in resolving this at the earliest.
+Could someone please help identify the correct owning team or assist in provisioning the namespace-level SecretStore for both the mics-nonprod-qa and mics-nonprod-uat namespaces (similar to the DEV environment), or trigger the corresponding workflow if it has not yet been executed?
+
+We are currently blocked on synchronizing secrets from Vault into Kubernetes for both environments, which is preventing our application validation and testing activities. We would greatly appreciate your support in helping us resolve this dependency at the earliest.
