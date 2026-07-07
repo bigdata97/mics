@@ -1,7 +1,5 @@
-Investigated the Snyk scan limit issue and documented the recommended mitigation strategy. The proposed solution includes:
+Hi Team,
 
-Introducing GitHub Actions concurrency to prevent duplicate Snyk scans.
-Optimizing workflow trigger configuration to eliminate redundant executions.
-Validating the Snyk token and organization configuration used by the GitHub Actions workflows.
+During a review of the VirtualService configurations for the dev environment, I observed that a few service names appear to be inconsistent with our team's naming convention. To keep the configurations consistent and easier to maintain, it may be worthwhile to align them with the standard naming convention.
 
-These changes are expected to reduce Snyk scan limit failures and improve CI pipeline stability.
+Please let me know if there is any specific reason for the current naming; otherwise, we can plan to standardize them.
