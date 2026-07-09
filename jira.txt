@@ -1,5 +1,4 @@
 Hi Team,
+We are currently seeing CI build failures across multiple repositories. The issue appears to be with one of the shared GitHub Actions workflows that our CI pipeline invokes. While the recent changes removed the artifactory_token and artifactory_username inputs from the shared workflows, one of the internally referenced Maven build workflows is still expecting those inputs, causing the CI builds to fail.
 
-During a review of the VirtualService configurations for the dev environment, I observed that a few service names appear to be inconsistent with our team's naming convention. To keep the configurations consistent and easier to maintain, it may be worthwhile to align them with the standard naming convention.
-
-Please let me know if there is any specific reason for the current naming; otherwise, we can plan to standardize them.
+Since these are shared workflows, our team doesn't have permission to modify them. I've already raised a support ticket with the CI/CD team, and they are investigating the issue. I'll share an update as soon as a fix is available. Until then, please be aware that CI failures related to this issue are expected.
