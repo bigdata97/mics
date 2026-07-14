@@ -1,4 +1,10 @@
-Hi Team,
-We are currently seeing CI build failures across multiple repositories. The issue appears to be with one of the shared GitHub Actions workflows that our CI pipeline invokes. While the recent changes removed the artifactory_token and artifactory_username inputs from the shared workflows, one of the internally referenced Maven build workflows is still expecting those inputs, causing the CI builds to fail.
+Hi Sagar,
 
-Since these are shared workflows, our team doesn't have permission to modify them. I've already raised a support ticket with the CI/CD team, and they are investigating the issue. I'll share an update as soon as a fix is available. Until then, please be aware that CI failures related to this issue are expected.
+Apologies for missing the bridge yesterday. I had accepted the original meeting invite scheduled for July 20th; however, I was not aware that the meeting had been rescheduled to July 13th at 11:00 PM EST, as the updated invite was sent after my work hours and I had already logged off for the day.
+
+Please let me know if there are any follow-up actions required from my end regarding CTASK0200899, and I will be happy to assist.
+
+Thank you for your understanding.
+
+Best regards,
+Eswara Reddy Madire
