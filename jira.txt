@@ -1,10 +1,14 @@
-Hi Sagar,
+DEV_MOUNT="kv-v2/app/k8s/hcb-nonprod-mics/mics-nonprod-use4/mics-nonprod-dev"
 
-Apologies for missing the bridge yesterday. I had accepted the original meeting invite scheduled for July 20th; however, I was not aware that the meeting had been rescheduled to July 13th at 11:00 PM EST, as the updated invite was sent after my work hours and I had already logged off for the day.
+QA_MOUNT="kv-v2/app/k8s/hcb-nonprod-mics/mics-qa-use4/mics-nonprod-qa"
 
-Please let me know if there are any follow-up actions required from my end regarding CTASK0200899, and I will be happy to assist.
 
-Thank you for your understanding.
 
-Best regards,
-Eswara Reddy Madire
+
+Run:
+
+vault token capabilities "${DEV_MOUNT}/data/*"
+vault token capabilities "${DEV_MOUNT}/metadata/*"
+
+vault token capabilities "${QA_MOUNT}/data/*"
+vault token capabilities "${QA_MOUNT}/metadata/*"
