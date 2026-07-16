@@ -1,14 +1,7 @@
-DEV_MOUNT="kv-v2/app/k8s/hcb-nonprod-mics/mics-nonprod-use4/mics-nonprod-dev"
+Hi Team,
 
-QA_MOUNT="kv-v2/app/k8s/hcb-nonprod-mics/mics-qa-use4/mics-nonprod-qa"
+As part of the Vault onboarding activities for the QA environment, I need to update the deployment configuration templates and deployment files for all services. I am planning to perform these changes on Friday after 2:00 PM EST.
 
+Although the changes are expected to be configuration updates only, there may be temporary impacts to deployments during this window. Requesting the development and testing teams to plan accordingly and let me know if there are any concerns or dependencies that need to be considered before the changes are made.
 
-
-
-Run:
-
-vault token capabilities "${DEV_MOUNT}/data/*"
-vault token capabilities "${DEV_MOUNT}/metadata/*"
-
-vault token capabilities "${QA_MOUNT}/data/*"
-vault token capabilities "${QA_MOUNT}/metadata/*"
+Thank you.
