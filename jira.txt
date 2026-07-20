@@ -1,7 +1,9 @@
 Hi Team,
 
-As part of the Vault onboarding activities for the QA environment, I need to update the deployment configuration templates and deployment files for all services. I am planning to perform these changes on Friday after 2:00 PM EST.
+The Vault onboarding activity for both the Dev and QA environments has been completed successfully. The secrets for the onboarded applications are now being managed through Vault and are available to the applications in Kubernetes via the GitOps setup.
 
-Although the changes are expected to be configuration updates only, there may be temporary impacts to deployments during this window. Requesting the development and testing teams to plan accordingly and let me know if there are any concerns or dependencies that need to be considered before the changes are made.
+Going forward, if there is a need to onboard any new secrets, please reach out to Ashutosh or me. We will help with adding the required configurations in GitOps and making the secrets available to the respective applications in Kubernetes.
+
+Please let us know if you have any questions or need assistance with future onboarding activities.
 
 Thank you.
