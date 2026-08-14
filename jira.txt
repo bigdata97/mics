@@ -1,9 +1,624 @@
-Hi Team,
+I reviewed the screenshots closely. The main point is: **your QA problem is not simply “the cluster needs more nodes.”** The cluster already has reasonable capacity, but the way workload requests, pod replicas, PDBs, and autoscaling interact is causing both **latency risk** and **scale-down restrictions**.
 
-The Vault onboarding activity for both the Dev and QA environments has been completed successfully. The secrets for the onboarded applications are now being managed through Vault and are available to the applications in Kubernetes via the GitOps setup.
+From your screenshots, the QA cluster `mics-qa-use4` is a **regional Standard GKE cluster in `us-east4`**, using an `n2-standard-16` node pool. Each node exposes roughly **15.89 allocatable vCPU and ~61.48 GB memory**. The node pool is configured with autoscaling at approximately **1–3 nodes per zone**, and because this is a regional pool across 3 zones, that can represent a materially larger total cluster size than the single-zone number suggests. GKE explicitly notes that multi-zone node pool sizing/autoscaling values can apply per zone depending on configuration, so this distinction matters before making any manual resize. ([Google Cloud Documentation][1])
 
-Going forward, if there is a need to onboard any new secrets, please reach out to Ashutosh or me. We will help with adding the required configurations in GitOps and making the secrets available to the respective applications in Kubernetes.
+The screenshots also show a very important clue: one node is **cordoned**, while several nodes have very different CPU requests. For example, some nodes are requesting around **9–10 CPU out of ~15.89 allocatable**, while another node is only around **0.5 CPU requested**. That means the issue is not simply “all nodes are full.” You have **uneven workload placement/resource reservation**, and probably a mix of pod requests that prevents Kubernetes from packing workloads efficiently.
 
-Please let us know if you have any questions or need assistance with future onboarding activities.
+The orange warning, **“Pod is blocking scale down because it doesn’t have enough Pod Disruption Budget (PDB)”**, is a separate issue from scale-up. It means GKE sees a node that could potentially be removed, but a pod on that node cannot be safely evicted because its PDB would be violated. PDBs are supposed to protect availability during voluntary disruptions, but overly strict PDBs can prevent the cluster autoscaler from consolidating nodes. ([Google Cloud Documentation][2])
 
-Thank you.
+So I would not recommend telling your lead, “We should just add 2 more nodes.” A more standard enterprise answer is:
+
+**temporarily increase capacity for QA if immediate relief is required, but fix the workload autoscaling and resource configuration so the cluster scales automatically thereafter.**
+
+### What I see in your QA cluster
+
+Your current design already has **GKE Cluster Autoscaler enabled on the node pool**, because the screenshot shows `Autoscaling: 1–3 nodes per zone`. GKE's cluster autoscaler is specifically designed to add nodes when pods cannot be scheduled because of resource shortages, and remove nodes when capacity is no longer required. ([Google Cloud Documentation][3])
+
+That means the first question should be:
+
+**Why isn't the existing autoscaler solving the event-processing latency?**
+
+The likely answer is that Kubernetes Cluster Autoscaler does **not** add nodes because an application is slow. It adds nodes primarily when pods need capacity and cannot be scheduled. So if you have six rule-execution pods running successfully but each pod is overloaded with requests, Kubernetes may still consider the cluster healthy.
+
+That matches exactly what your team said:
+
+> “Each rule itself is not taking time but the amount of requests it receives is huge. 1 plan event = 200+ rule executions.”
+
+This sounds much more like a **horizontal application scaling problem** than purely a cluster capacity problem.
+
+The correct relationship is:
+
+```text
+Incoming request spike
+        ↓
+Rule Execution pods consume CPU / custom metric increases
+        ↓
+HPA increases replicas
+        ↓
+Existing nodes fill up
+        ↓
+New pods become Pending if necessary
+        ↓
+GKE Cluster Autoscaler adds nodes
+        ↓
+New pods schedule on new nodes
+```
+
+That combination — **HPA + Cluster Autoscaler** — is the standard Kubernetes/GKE pattern. GKE recommends HPA for adjusting replica counts based on metrics and cluster autoscaler for resizing the underlying node pool. ([Google Cloud Documentation][4])
+
+Right now you appear to have only the bottom part well configured.
+
+---
+
+## What I would do immediately
+
+For the immediate QA performance testing, **do not disable autoscaling and do not permanently hard-code more nodes**.
+
+Instead, increase the autoscaling ceiling.
+
+Your current configuration appears to be approximately:
+
+```text
+Machine type: n2-standard-16
+Regions/zones:
+  us-east4-a
+  us-east4-b
+  us-east4-c
+
+Autoscaling:
+  min: 1
+  max: 3
+```
+
+First verify it from CLI:
+
+```bash
+gcloud container node-pools describe default-node-pool-1fa0 \
+  --cluster=mics-qa-use4 \
+  --region=us-east4 \
+  --project=hcb-nonprod-mics \
+  --format="yaml(name,autoscaling,initialNodeCount,locations,config.machineType)"
+```
+
+Then inspect current nodes:
+
+```bash
+kubectl get nodes
+```
+
+and:
+
+```bash
+kubectl top nodes
+```
+
+For the temporary QA load test, something like:
+
+```bash
+gcloud container clusters update mics-qa-use4 \
+  --region=us-east4 \
+  --project=hcb-nonprod-mics \
+  --enable-autoscaling \
+  --node-pool=default-node-pool-1fa0 \
+  --min-nodes=2 \
+  --max-nodes=4
+```
+
+could be reasonable **only after confirming whether your organization's configuration is per-zone or total-node autoscaling**.
+
+In a regional 3-zone node pool, `max-nodes=4` may effectively allow significantly more total nodes than somebody casually reading the number “4” would expect. Google documents this distinction, so check before executing it. ([Google Cloud Documentation][1])
+
+I would probably start modestly rather than jumping aggressively.
+
+---
+
+# But this is the more important fix
+
+Your rule-execution service needs an HPA.
+
+You mentioned:
+
+```text
+Currently ~6 instances/pods
+Very high request volume
+1 plan event → 200+ executions
+```
+
+Suppose the workload currently looks roughly like:
+
+```yaml
+replicas: 6
+```
+
+Instead of manually changing that to 8, 10, or 12 whenever QA experiences load, introduce an HPA.
+
+A typical starting point might look like:
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: rule-execution-service
+  namespace: mics-nonprod-qa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rule-execution-service
+
+  minReplicas: 6
+  maxReplicas: 15
+
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+```
+
+Don't copy those exact thresholds directly into production. They should be tuned from actual load testing. But structurally, that is the pattern you want.
+
+GKE supports HPA specifically for this use case. ([Google Cloud Documentation][5])
+
+---
+
+# Resource requests need review before adding nodes
+
+The screenshots show that Kubernetes is scheduling based on **requested resources**, not necessarily actual consumption.
+
+Run:
+
+```bash
+kubectl top pods -n mics-nonprod-qa --sort-by=cpu
+```
+
+and:
+
+```bash
+kubectl get pods -n mics-nonprod-qa \
+  -o custom-columns="POD:.metadata.name,CPU_REQ:.spec.containers[*].resources.requests.cpu,CPU_LIMIT:.spec.containers[*].resources.limits.cpu,MEM_REQ:.spec.containers[*].resources.requests.memory,MEM_LIMIT:.spec.containers[*].resources.limits.memory"
+```
+
+For the specific rule service:
+
+```bash
+kubectl get deployment rule-execution-service \
+  -n mics-nonprod-qa \
+  -o yaml
+```
+
+Look for:
+
+```yaml
+resources:
+  requests:
+    cpu:
+    memory:
+  limits:
+    cpu:
+    memory:
+```
+
+This is crucial because Cluster Autoscaler makes scheduling decisions largely from **resource requests**, not from “the node looks busy in monitoring.”
+
+If a pod requests:
+
+```yaml
+cpu: "4"
+```
+
+but normally consumes:
+
+```text
+700m
+```
+
+you are reserving almost 6× the CPU needed.
+
+Conversely, if the pod requests:
+
+```yaml
+cpu: 250m
+```
+
+but routinely consumes:
+
+```text
+2 CPU
+```
+
+HPA behavior based on utilization can become misleading.
+
+Google recommends right-sizing workload requests and limits and offers VPA recommendations for analyzing historical usage. ([Google Cloud Documentation][6])
+
+For your situation, I would initially use VPA in recommendation mode rather than automatically allowing it to change the application.
+
+Example:
+
+```yaml
+apiVersion: autoscaling.k8s.io/v1
+kind: VerticalPodAutoscaler
+metadata:
+  name: rule-execution-vpa
+  namespace: mics-nonprod-qa
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: rule-execution-service
+
+  updatePolicy:
+    updateMode: "Off"
+```
+
+Then:
+
+```bash
+kubectl describe vpa rule-execution-vpa \
+  -n mics-nonprod-qa
+```
+
+That gives you recommendations without letting VPA automatically restart/change the pods.
+
+---
+
+# Your PDB warning needs to be fixed separately
+
+Check all QA PDBs:
+
+```bash
+kubectl get pdb -n mics-nonprod-qa
+```
+
+Then:
+
+```bash
+kubectl describe pdb -n mics-nonprod-qa
+```
+
+Look especially for cases such as:
+
+```yaml
+replicas: 1
+
+PDB:
+minAvailable: 1
+```
+
+That effectively tells Kubernetes:
+
+> The only pod must always remain available.
+
+Therefore it cannot be voluntarily evicted during node consolidation.
+
+Another problematic example:
+
+```text
+replicas = 3
+minAvailable = 3
+```
+
+Again:
+
+```text
+allowed disruptions = 0
+```
+
+For a stateless application with three or more replicas, something such as:
+
+```yaml
+spec:
+  maxUnavailable: 1
+```
+
+is frequently easier to operate.
+
+For example:
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: rule-execution-pdb
+  namespace: mics-nonprod-qa
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: rule-execution-service
+```
+
+That maintains availability while still allowing node maintenance and scale-down.
+
+The exact setting depends on the application's availability requirements; don't blindly relax PDBs just to clear the warning. Google's guidance is that PDBs should make workloads disruption-ready without unnecessarily preventing safe node operations. ([Google Cloud Documentation][2])
+
+---
+
+# Something interesting in your node screenshots
+
+You have one node shown as:
+
+```text
+Cordoned
+```
+
+with very low requested resources:
+
+```text
+~574 mCPU
+~813 MB
+```
+
+That node cannot accept new workloads.
+
+Check why:
+
+```bash
+kubectl get nodes
+```
+
+Then:
+
+```bash
+kubectl describe node <cordoned-node-name>
+```
+
+Also:
+
+```bash
+kubectl get pods -A \
+  --field-selector spec.nodeName=<cordoned-node-name>
+```
+
+If somebody manually ran:
+
+```bash
+kubectl cordon <node>
+```
+
+and maintenance is finished, it may simply need:
+
+```bash
+kubectl uncordon <node>
+```
+
+But confirm why it was cordoned first.
+
+You effectively lose schedulable capacity while that node remains cordoned.
+
+---
+
+# I would also investigate load distribution
+
+Your lead's comment says:
+
+> “It is running 6 instances and load is splitting properly.”
+
+That's useful, but I would verify it quantitatively.
+
+Run:
+
+```bash
+kubectl top pod -n mics-nonprod-qa \
+  | grep rule-execution
+```
+
+You want something approximately like:
+
+```text
+rule-execution-abc   1200m
+rule-execution-def   1150m
+rule-execution-ghi   1300m
+rule-execution-jkl   1180m
+...
+```
+
+rather than:
+
+```text
+pod1    3100m
+pod2     300m
+pod3     400m
+pod4     350m
+...
+```
+
+If workloads are uneven despite six replicas, adding nodes won't really fix the underlying problem.
+
+---
+
+# Synchronous logging is also a legitimate concern
+
+The other team member raised:
+
+> “Logs are very high and they are synchronous.”
+
+That could absolutely contribute to latency.
+
+If your Spring Boot services are writing very high-volume INFO logs synchronously, every request may incur extra formatting, stdout/container logging and downstream ingestion overhead.
+
+I wouldn't immediately change everything from `INFO` to `WARN`, though.
+
+First identify noisy packages:
+
+```bash
+kubectl logs <pod> -n mics-nonprod-qa --since=5m | wc -l
+```
+
+and inspect application logging configuration.
+
+If using Logback, async appenders are worth investigating.
+
+Conceptually:
+
+```text
+Application thread
+       |
+       v
+async logging queue
+       |
+       v
+logging worker
+       |
+       v
+stdout / logging backend
+```
+
+instead of:
+
+```text
+Application request
+       |
+       v
+write log
+       |
+       v
+wait
+       |
+       v
+continue request processing
+```
+
+So the dev team's suggestion should be investigated alongside infrastructure scaling.
+
+---
+
+# What I recommend as the enterprise-standard target
+
+For MICS QA, I would aim for this architecture:
+
+```text
+                       ┌──────────────────────┐
+                       │ Incoming Plan Event  │
+                       └──────────┬───────────┘
+                                  │
+                              200+ rules
+                                  │
+                                  ▼
+                    ┌─────────────────────────┐
+                    │ Rule Execution Service  │
+                    │                         │
+                    │ Pods 6 → 8 → 12 → 15   │
+                    └───────────┬─────────────┘
+                                │
+                         HPA monitors
+                       CPU/custom metric
+                                │
+                 ┌──────────────┴──────────────┐
+                 │                             │
+          Capacity available             No capacity
+                 │                             │
+                 ▼                             ▼
+          schedule pods            Cluster Autoscaler
+                                             │
+                                             ▼
+                                 GKE adds node automatically
+                                             │
+                                             ▼
+                                      pods scheduled
+```
+
+And on the way back down:
+
+```text
+Traffic decreases
+      ↓
+HPA reduces pod replicas
+      ↓
+nodes become underutilized
+      ↓
+PDB permits eviction
+      ↓
+Cluster Autoscaler removes extra node
+```
+
+That is much more sustainable than:
+
+```text
+latency → call DevOps → manually add 2 nodes
+```
+
+---
+
+## What I would change in your cluster
+
+If this were my QA cluster, my priority order would be:
+
+1. **Do not immediately change machine type.** `n2-standard-16` is already a substantial node.
+2. Investigate resource requests vs actual usage.
+3. Fix any overly restrictive PDB.
+4. Understand the cordoned node.
+5. Add HPA for the high-volume rule execution service.
+6. Keep node-pool autoscaler enabled.
+7. Temporarily raise autoscaler maximum if QA testing requires extra headroom.
+8. Investigate asynchronous/noisy logging.
+9. Add monitoring/alerts on CPU saturation, Pending pods, HPA max replicas and node-pool max capacity.
+
+This combination addresses both the immediate ask from your lead and the underlying architecture.
+
+### One command set I'd run before making any change
+
+```bash
+# Cluster/node-pool configuration
+gcloud container node-pools describe default-node-pool-1fa0 \
+  --cluster=mics-qa-use4 \
+  --region=us-east4 \
+  --project=hcb-nonprod-mics
+
+# Nodes
+kubectl get nodes -o wide
+
+# Node resource utilization
+kubectl top nodes
+
+# QA pod utilization
+kubectl top pods -n mics-nonprod-qa --sort-by=cpu
+
+# Current workload replicas/resources
+kubectl get deploy -n mics-nonprod-qa
+
+# HPA configuration
+kubectl get hpa -n mics-nonprod-qa
+
+# PDB configuration
+kubectl get pdb -n mics-nonprod-qa
+
+# Pending pods
+kubectl get pods -n mics-nonprod-qa \
+  --field-selector=status.phase=Pending
+
+# Events
+kubectl get events -n mics-nonprod-qa \
+  --sort-by='.lastTimestamp' | tail -50
+```
+
+If you send me the outputs of those commands—especially `kubectl top nodes`, `kubectl top pods`, `kubectl get hpa`, `kubectl get pdb`, and the node-pool `describe`—I can calculate whether you actually need more nodes, how many nodes would make sense, what HPA values to start with, and whether the current PDB is incorrectly blocking GKE scale-down.
+
+[1]: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/resizing-a-cluster?utm_source=chatgpt.com "Resize a Standard cluster by adding or removing nodes"
+[2]: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/workload-disruption-readiness?utm_source=chatgpt.com "Ensure workloads are disruption-ready"
+[3]: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/cluster-autoscaler?utm_source=chatgpt.com "About GKE cluster autoscaling"
+[4]: https://docs.cloud.google.com/kubernetes-engine/docs/concepts/horizontalpodautoscaler?utm_source=chatgpt.com "Horizontal Pod autoscaling | Google Kubernetes Engine ..."
+[5]: https://docs.cloud.google.com/kubernetes-engine/docs/how-to/horizontal-pod-autoscaling?utm_source=chatgpt.com "Configuring horizontal Pod autoscaling"
+[6]: https://docs.cloud.google.com/kubernetes-engine/docs/tutorials/right-size-workloads-at-scale?utm_source=chatgpt.com "Right-size your GKE workloads at scale | Kubernetes Engine"
+
+
+
+
+
