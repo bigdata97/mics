@@ -1,38 +1,383 @@
-Run this with your **prod project id** and **infra SA email**:
+import subprocess
+import json
+import csv
+import os
+import sys
 
-```bash
-PROD_PROJECT_ID="hcb-prod-mics"
-INFRA_SA="infra-admin@hcb-prod-mics.iam.gserviceaccount.com"
 
-gcloud projects get-iam-policy "$PROD_PROJECT_ID" \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:$INFRA_SA" \
-  --format="table(bindings.role)"
-```
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
-If your infra SA email is different, replace it.
+VAULT_ADDR = "https://vault-nonprod.cvshealth.com"
 
-To see full details including IAM conditions:
+DEV_MOUNT = (
+    "kv-v2/app/k8s/"
+    "hcb-nonprod-mics/"
+    "mics-nonprod-use4/"
+    "mics-nonprod-dev"
+)
 
-```bash
-gcloud projects get-iam-policy "$PROD_PROJECT_ID" \
-  --flatten="bindings[].members" \
-  --filter="bindings.members:serviceAccount:$INFRA_SA" \
-  --format="yaml(bindings.role,bindings.members,bindings.condition)"
-```
+OUTPUT_FILE = "vault_dev_secrets.csv"
 
-Also check who can impersonate that infra SA:
 
-```bash
-gcloud iam service-accounts get-iam-policy "$INFRA_SA" \
-  --project="$PROD_PROJECT_ID"
-```
+# ============================================================
+# SET VAULT ADDRESS
+# Equivalent to:
+#
+# export VAULT_ADDR=https://vault-nonprod.cvshealth.com
+# ============================================================
 
-For folder/org inherited roles, project policy alone may not show everything. Use this too:
+os.environ["VAULT_ADDR"] = VAULT_ADDR
 
-```bash
-gcloud asset search-all-iam-policies \
-  --scope="projects/$PROD_PROJECT_ID" \
-  --query="policy:$INFRA_SA" \
-  --format="table(resource,policy.bindings.role)"
-```
+
+# ============================================================
+# RUN VAULT COMMAND
+# ============================================================
+
+def run_vault_command(args, fail_on_error=True):
+
+    try:
+        result = subprocess.run(
+            args,
+            capture_output=True,
+            text=True,
+            check=False
+        )
+
+        if result.returncode != 0:
+
+            if fail_on_error:
+                print()
+                print("Vault command failed:")
+                print(" ".join(args))
+                print()
+                print(result.stderr)
+
+            return None
+
+        return result.stdout.strip()
+
+    except FileNotFoundError:
+
+        print("ERROR: Vault CLI was not found.")
+        print()
+        print("Make sure this works first:")
+        print("vault --version")
+        sys.exit(1)
+
+
+# ============================================================
+# CHECK VAULT CONNECTION
+# ============================================================
+
+def check_vault():
+
+    print("=" * 70)
+    print("Checking Vault connection")
+    print("=" * 70)
+
+    print(f"VAULT_ADDR : {VAULT_ADDR}")
+    print(f"Mount      : {DEV_MOUNT}")
+    print()
+
+    output = run_vault_command(
+        ["vault", "status"],
+        fail_on_error=False
+    )
+
+    if output:
+        print("Vault server is reachable.")
+    else:
+        print("WARNING: Unable to verify Vault status.")
+
+
+# ============================================================
+# OPTIONAL OIDC LOGIN
+#
+# Equivalent to:
+# vault login -method=oidc
+# ============================================================
+
+def vault_login():
+
+    print()
+    print("=" * 70)
+    print("Vault OIDC Login")
+    print("=" * 70)
+    print()
+
+    result = subprocess.run(
+        ["vault", "login", "-method=oidc"]
+    )
+
+    if result.returncode != 0:
+        print("Vault authentication failed.")
+        sys.exit(1)
+
+    print()
+    print("Vault authentication successful.")
+
+
+# ============================================================
+# LIST SECRETS
+#
+# Equivalent to:
+#
+# vault kv list -mount="$DEV_MOUNT" ""
+# ============================================================
+
+def list_secrets(path=""):
+
+    output = run_vault_command([
+        "vault",
+        "kv",
+        "list",
+        f"-mount={DEV_MOUNT}",
+        "-format=json",
+        path
+    ])
+
+    if not output:
+        return []
+
+    try:
+        items = json.loads(output)
+
+    except json.JSONDecodeError:
+
+        print(f"Unable to parse secret listing for path: {path}")
+        return []
+
+    secrets = []
+
+    for item in items:
+
+        # Vault represents nested folders using trailing /
+        if item.endswith("/"):
+
+            subfolder = f"{path}{item}"
+
+            secrets.extend(
+                list_secrets(subfolder)
+            )
+
+        else:
+
+            secret_name = f"{path}{item}"
+
+            secrets.append(secret_name)
+
+    return secrets
+
+
+# ============================================================
+# READ ONE SECRET
+#
+# Equivalent to:
+#
+# vault kv get -mount="$DEV_MOUNT" "accesshub-secrets"
+# ============================================================
+
+def get_secret(secret_name):
+
+    output = run_vault_command([
+        "vault",
+        "kv",
+        "get",
+        f"-mount={DEV_MOUNT}",
+        "-format=json",
+        secret_name
+    ])
+
+    if not output:
+        return None
+
+    try:
+        response = json.loads(output)
+
+    except json.JSONDecodeError:
+
+        print(f"Unable to parse secret: {secret_name}")
+        return None
+
+
+    # ========================================================
+    # KV-V2 structure:
+    #
+    # {
+    #   "data": {
+    #       "data": {
+    #           "api-key": "...",
+    #           "oauth-basic-auth": "...",
+    #           "url": "..."
+    #       },
+    #       "metadata": {...}
+    #   }
+    # }
+    # ========================================================
+
+    try:
+        return response["data"]["data"]
+
+    except (KeyError, TypeError):
+
+        print(
+            f"WARNING: Secret {secret_name} "
+            "does not have expected KV-v2 data."
+        )
+
+        return None
+
+
+# ============================================================
+# EXPORT EVERYTHING
+# ============================================================
+
+def export_secrets():
+
+    print()
+    print("=" * 70)
+    print("Listing Vault secrets")
+    print("=" * 70)
+
+    secrets = list_secrets("")
+
+    if not secrets:
+        print("No secrets found.")
+        return
+
+    print()
+    print(f"Total secrets found: {len(secrets)}")
+    print()
+
+    rows = []
+
+    successful = 0
+    failed = 0
+
+    for number, secret_name in enumerate(secrets, start=1):
+
+        print(
+            f"[{number}/{len(secrets)}] "
+            f"Reading: {secret_name}"
+        )
+
+        data = get_secret(secret_name)
+
+        if data is None:
+
+            print("   -> Unable to read")
+
+            failed += 1
+            continue
+
+        successful += 1
+
+        print(
+            f"   -> {len(data)} key/value pair(s)"
+        )
+
+
+        # ====================================================
+        # IMPORTANT:
+        #
+        # This handles multiple keys under each secret.
+        #
+        # Example:
+        #
+        # accesshub-secrets
+        #
+        # api-key
+        # oauth-basic-auth
+        # url
+        #
+        # becomes THREE rows in Excel.
+        # ====================================================
+
+        for key, value in data.items():
+
+            # If Vault happens to contain JSON/list values,
+            # preserve them as readable JSON.
+            if isinstance(value, (dict, list)):
+
+                value = json.dumps(
+                    value,
+                    ensure_ascii=False
+                )
+
+            elif value is None:
+
+                value = ""
+
+            else:
+
+                value = str(value)
+
+
+            rows.append({
+                "SecretName": secret_name,
+                "Key": key,
+                "Value": value
+            })
+
+
+    # ========================================================
+    # WRITE CSV
+    #
+    # UTF-8-SIG makes it open cleanly in Microsoft Excel.
+    # ========================================================
+
+    with open(
+        OUTPUT_FILE,
+        "w",
+        newline="",
+        encoding="utf-8-sig"
+    ) as file:
+
+        writer = csv.DictWriter(
+            file,
+            fieldnames=[
+                "SecretName",
+                "Key",
+                "Value"
+            ]
+        )
+
+        writer.writeheader()
+
+        writer.writerows(rows)
+
+
+    print()
+    print("=" * 70)
+    print("EXPORT COMPLETED")
+    print("=" * 70)
+
+    print(f"Secrets successfully read : {successful}")
+    print(f"Secrets failed            : {failed}")
+    print(f"Key/value pairs exported  : {len(rows)}")
+    print(f"Output file               : {OUTPUT_FILE}")
+
+
+# ============================================================
+# MAIN
+# ============================================================
+
+if __name__ == "__main__":
+
+    check_vault()
+
+    # --------------------------------------------------------
+    # If you have NOT already authenticated, uncomment this:
+    #
+    # vault_login()
+    #
+    # This executes:
+    #
+    # vault login -method=oidc
+    #
+    # and will launch your browser.
+    # --------------------------------------------------------
+
+    export_secrets()
