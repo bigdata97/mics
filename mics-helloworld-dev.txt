@@ -1,383 +1,377 @@
-import subprocess
-import json
-import csv
-import os
-import sys
+name: Create QA to PROD PRs
 
+on:
+  workflow_dispatch:
+    inputs:
+      pr_title:
+        description: "Enter PR title"
+        required: true
+        type: string
 
-# ============================================================
-# CONFIGURATION
-# ============================================================
+permissions:
+  contents: read
 
-VAULT_ADDR = "https://vault-nonprod.cvshealth.com"
+env:
+  GITHUB_ORG: cvs-health-source-code
+  SOURCE_BRANCH: release/qa
+  TARGET_BRANCH: main
+  REPO_FILE: .github/prod-promotion/repos.txt
 
-DEV_MOUNT = (
-    "kv-v2/app/k8s/"
-    "hcb-nonprod-mics/"
-    "mics-nonprod-use4/"
-    "mics-nonprod-dev"
-)
 
-OUTPUT_FILE = "vault_dev_secrets.csv"
+jobs:
 
+  # ============================================================
+  # Job 1: Read repository list and generate matrix
+  # ============================================================
+  setup-matrix:
+    name: Load repository list
+    runs-on: self-hosted
 
-# ============================================================
-# SET VAULT ADDRESS
-# Equivalent to:
-#
-# export VAULT_ADDR=https://vault-nonprod.cvshealth.com
-# ============================================================
+    outputs:
+      matrix: ${{ steps.read.outputs.matrix }}
 
-os.environ["VAULT_ADDR"] = VAULT_ADDR
+    steps:
 
+      - name: Checkout mics-gitops
+        uses: actions/checkout@v4
+        with:
+          ref: main
 
-# ============================================================
-# RUN VAULT COMMAND
-# ============================================================
+      - name: Parse repository list
+        id: read
+        shell: bash
+        run: |
+          set -euo pipefail
 
-def run_vault_command(args, fail_on_error=True):
+          if [[ ! -f "${REPO_FILE}" ]]; then
+            echo "Repository file not found: ${REPO_FILE}"
+            exit 1
+          fi
 
-    try:
-        result = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            check=False
-        )
+          MATRIX=$(python3 <<'PYEOF'
+          import json
+          import os
 
-        if result.returncode != 0:
+          repo_file = os.environ["REPO_FILE"]
 
-            if fail_on_error:
-                print()
-                print("Vault command failed:")
-                print(" ".join(args))
-                print()
-                print(result.stderr)
+          repos = []
 
-            return None
+          with open(repo_file, "r") as f:
+              for line in f:
+                  line = line.strip()
+
+                  if not line:
+                      continue
 
-        return result.stdout.strip()
+                  if line.startswith("#"):
+                      continue
 
-    except FileNotFoundError:
+                  repos.append({
+                      "repo": line
+                  })
 
-        print("ERROR: Vault CLI was not found.")
-        print()
-        print("Make sure this works first:")
-        print("vault --version")
-        sys.exit(1)
+          if not repos:
+              raise SystemExit("No repositories found in repos.txt")
 
+          print(json.dumps({"include": repos}))
+          PYEOF
+          )
 
-# ============================================================
-# CHECK VAULT CONNECTION
-# ============================================================
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
 
-def check_vault():
+          echo "Repositories selected:"
+          echo "$MATRIX" | python3 -m json.tool
 
-    print("=" * 70)
-    print("Checking Vault connection")
-    print("=" * 70)
 
-    print(f"VAULT_ADDR : {VAULT_ADDR}")
-    print(f"Mount      : {DEV_MOUNT}")
-    print()
-
-    output = run_vault_command(
-        ["vault", "status"],
-        fail_on_error=False
-    )
-
-    if output:
-        print("Vault server is reachable.")
-    else:
-        print("WARNING: Unable to verify Vault status.")
-
-
-# ============================================================
-# OPTIONAL OIDC LOGIN
-#
-# Equivalent to:
-# vault login -method=oidc
-# ============================================================
-
-def vault_login():
-
-    print()
-    print("=" * 70)
-    print("Vault OIDC Login")
-    print("=" * 70)
-    print()
-
-    result = subprocess.run(
-        ["vault", "login", "-method=oidc"]
-    )
-
-    if result.returncode != 0:
-        print("Vault authentication failed.")
-        sys.exit(1)
-
-    print()
-    print("Vault authentication successful.")
-
-
-# ============================================================
-# LIST SECRETS
-#
-# Equivalent to:
-#
-# vault kv list -mount="$DEV_MOUNT" ""
-# ============================================================
-
-def list_secrets(path=""):
-
-    output = run_vault_command([
-        "vault",
-        "kv",
-        "list",
-        f"-mount={DEV_MOUNT}",
-        "-format=json",
-        path
-    ])
-
-    if not output:
-        return []
-
-    try:
-        items = json.loads(output)
-
-    except json.JSONDecodeError:
-
-        print(f"Unable to parse secret listing for path: {path}")
-        return []
-
-    secrets = []
-
-    for item in items:
-
-        # Vault represents nested folders using trailing /
-        if item.endswith("/"):
-
-            subfolder = f"{path}{item}"
-
-            secrets.extend(
-                list_secrets(subfolder)
-            )
-
-        else:
-
-            secret_name = f"{path}{item}"
-
-            secrets.append(secret_name)
-
-    return secrets
-
-
-# ============================================================
-# READ ONE SECRET
-#
-# Equivalent to:
-#
-# vault kv get -mount="$DEV_MOUNT" "accesshub-secrets"
-# ============================================================
-
-def get_secret(secret_name):
-
-    output = run_vault_command([
-        "vault",
-        "kv",
-        "get",
-        f"-mount={DEV_MOUNT}",
-        "-format=json",
-        secret_name
-    ])
-
-    if not output:
-        return None
-
-    try:
-        response = json.loads(output)
-
-    except json.JSONDecodeError:
-
-        print(f"Unable to parse secret: {secret_name}")
-        return None
-
-
-    # ========================================================
-    # KV-V2 structure:
-    #
-    # {
-    #   "data": {
-    #       "data": {
-    #           "api-key": "...",
-    #           "oauth-basic-auth": "...",
-    #           "url": "..."
-    #       },
-    #       "metadata": {...}
-    #   }
-    # }
-    # ========================================================
-
-    try:
-        return response["data"]["data"]
-
-    except (KeyError, TypeError):
-
-        print(
-            f"WARNING: Secret {secret_name} "
-            "does not have expected KV-v2 data."
-        )
-
-        return None
-
-
-# ============================================================
-# EXPORT EVERYTHING
-# ============================================================
-
-def export_secrets():
-
-    print()
-    print("=" * 70)
-    print("Listing Vault secrets")
-    print("=" * 70)
-
-    secrets = list_secrets("")
-
-    if not secrets:
-        print("No secrets found.")
-        return
-
-    print()
-    print(f"Total secrets found: {len(secrets)}")
-    print()
-
-    rows = []
-
-    successful = 0
-    failed = 0
-
-    for number, secret_name in enumerate(secrets, start=1):
-
-        print(
-            f"[{number}/{len(secrets)}] "
-            f"Reading: {secret_name}"
-        )
-
-        data = get_secret(secret_name)
-
-        if data is None:
-
-            print("   -> Unable to read")
-
-            failed += 1
-            continue
-
-        successful += 1
-
-        print(
-            f"   -> {len(data)} key/value pair(s)"
-        )
-
-
-        # ====================================================
-        # IMPORTANT:
-        #
-        # This handles multiple keys under each secret.
-        #
-        # Example:
-        #
-        # accesshub-secrets
-        #
-        # api-key
-        # oauth-basic-auth
-        # url
-        #
-        # becomes THREE rows in Excel.
-        # ====================================================
-
-        for key, value in data.items():
-
-            # If Vault happens to contain JSON/list values,
-            # preserve them as readable JSON.
-            if isinstance(value, (dict, list)):
-
-                value = json.dumps(
-                    value,
-                    ensure_ascii=False
-                )
-
-            elif value is None:
-
-                value = ""
-
-            else:
-
-                value = str(value)
-
-
-            rows.append({
-                "SecretName": secret_name,
-                "Key": key,
-                "Value": value
-            })
-
-
-    # ========================================================
-    # WRITE CSV
-    #
-    # UTF-8-SIG makes it open cleanly in Microsoft Excel.
-    # ========================================================
-
-    with open(
-        OUTPUT_FILE,
-        "w",
-        newline="",
-        encoding="utf-8-sig"
-    ) as file:
-
-        writer = csv.DictWriter(
-            file,
-            fieldnames=[
-                "SecretName",
-                "Key",
-                "Value"
-            ]
-        )
-
-        writer.writeheader()
-
-        writer.writerows(rows)
-
-
-    print()
-    print("=" * 70)
-    print("EXPORT COMPLETED")
-    print("=" * 70)
-
-    print(f"Secrets successfully read : {successful}")
-    print(f"Secrets failed            : {failed}")
-    print(f"Key/value pairs exported  : {len(rows)}")
-    print(f"Output file               : {OUTPUT_FILE}")
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-if __name__ == "__main__":
-
-    check_vault()
-
-    # --------------------------------------------------------
-    # If you have NOT already authenticated, uncomment this:
-    #
-    # vault_login()
-    #
-    # This executes:
-    #
-    # vault login -method=oidc
-    #
-    # and will launch your browser.
-    # --------------------------------------------------------
-
-    export_secrets()
+  # ============================================================
+  # Job 2: Create PR for each repository
+  # ============================================================
+  create-pr:
+    name: PR ${{ matrix.repo }} release/qa to main
+
+    needs:
+      - setup-matrix
+
+    runs-on: self-hosted
+
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.setup-matrix.outputs.matrix) }}
+
+    steps:
+
+      # --------------------------------------------------------
+      # Generate GitHub App token
+      # --------------------------------------------------------
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.GHA_WORKFLOW_APP_ID }}
+          private-key: ${{ secrets.GHA_WORKFLOW_APP_PRIVATE_KEY }}
+          owner: cvs-health-source-code
+
+
+      # --------------------------------------------------------
+      # Validate source and target branches
+      # --------------------------------------------------------
+      - name: Validate branches
+        id: validate
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          REPO="${GITHUB_ORG}/${{ matrix.repo }}"
+
+          echo "Repository : $REPO"
+          echo "Source     : ${SOURCE_BRANCH}"
+          echo "Target     : ${TARGET_BRANCH}"
+
+          if ! gh api \
+            "repos/${REPO}/branches/${SOURCE_BRANCH}" \
+            >/dev/null 2>&1; then
+
+            echo "Source branch '${SOURCE_BRANCH}' does not exist."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! gh api \
+            "repos/${REPO}/branches/${TARGET_BRANCH}" \
+            >/dev/null 2>&1; then
+
+            echo "Target branch '${TARGET_BRANCH}' does not exist."
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+
+
+      # --------------------------------------------------------
+      # Compare release/qa with main
+      # --------------------------------------------------------
+      - name: Check whether PR is needed
+        id: compare
+        if: steps.validate.outputs.eligible == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          REPO="${GITHUB_ORG}/${{ matrix.repo }}"
+
+          AHEAD=$(gh api \
+            "repos/${REPO}/compare/${TARGET_BRANCH}...${SOURCE_BRANCH}" \
+            --jq '.ahead_by')
+
+          echo "${SOURCE_BRANCH} is ahead of ${TARGET_BRANCH} by $AHEAD commit(s)."
+
+          if [[ "$AHEAD" -gt 0 ]]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+
+      # --------------------------------------------------------
+      # Check whether an open PR already exists
+      # --------------------------------------------------------
+      - name: Check for existing PR
+        id: existing
+        if: steps.compare.outputs.needed == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+
+          REPO="${GITHUB_ORG}/${{ matrix.repo }}"
+
+          EXISTING=$(gh pr list \
+            --repo "$REPO" \
+            --base "${TARGET_BRANCH}" \
+            --head "${SOURCE_BRANCH}" \
+            --state open \
+            --json number,url \
+            --jq '.[0].number // ""')
+
+          if [[ -n "$EXISTING" ]]; then
+
+            URL=$(gh pr view "$EXISTING" \
+              --repo "$REPO" \
+              --json url \
+              --jq '.url')
+
+            echo "Existing PR found:"
+            echo "$URL"
+
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+          else
+
+            echo "No existing PR found."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+
+          fi
+
+
+      # --------------------------------------------------------
+      # Create PR
+      # --------------------------------------------------------
+      - name: Create PR from release/qa to main
+        id: create
+        if: |
+          steps.compare.outputs.needed == 'true' &&
+          steps.existing.outputs.exists != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_TITLE: ${{ inputs.pr_title }}
+        run: |
+          set -euo pipefail
+
+          REPO="${GITHUB_ORG}/${{ matrix.repo }}"
+
+          cat > /tmp/pr-body.md <<'PREOF'
+          ## QA to Production Promotion
+
+          This PR promotes the current `release/qa` branch to `main`.
+
+          Source branch: `release/qa`
+
+          Target branch: `main`
+
+          This PR was created automatically by the MICS GitHub Actions workflow.
+
+          No approval or merge has been performed automatically.
+
+          Please review and approve/merge manually after the required validation is completed.
+          PREOF
+
+          PR_URL=$(gh pr create \
+            --repo "$REPO" \
+            --base "${TARGET_BRANCH}" \
+            --head "${SOURCE_BRANCH}" \
+            --title "$PR_TITLE" \
+            --body-file /tmp/pr-body.md)
+
+          echo "Created PR:"
+          echo "$PR_URL"
+
+          echo "url=$PR_URL" >> "$GITHUB_OUTPUT"
+
+
+      # --------------------------------------------------------
+      # Determine PR URL to publish
+      #
+      # This includes:
+      #   - newly created PR
+      #   - already existing PR
+      # --------------------------------------------------------
+      - name: Prepare PR link
+        id: result
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          URL=""
+
+          if [[ -n "${{ steps.create.outputs.url }}" ]]; then
+            URL="${{ steps.create.outputs.url }}"
+
+          elif [[ -n "${{ steps.existing.outputs.url }}" ]]; then
+            URL="${{ steps.existing.outputs.url }}"
+          fi
+
+          if [[ -n "$URL" ]]; then
+            echo "url=$URL" >> "$GITHUB_OUTPUT"
+
+            echo "$URL" > pr-link.txt
+
+            echo "PR available:"
+            echo "$URL"
+          else
+            echo "No PR generated for ${{ matrix.repo }}"
+            touch pr-link.txt
+          fi
+
+
+      # --------------------------------------------------------
+      # Upload individual PR link
+      # Each matrix job gets unique artifact name
+      # --------------------------------------------------------
+      - name: Upload PR link
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-link-${{ matrix.repo }}
+          path: pr-link.txt
+          if-no-files-found: ignore
+          retention-days: 1
+
+
+  # ============================================================
+  # Job 3: Print all PR URLs on Summary page
+  # ============================================================
+  summarize-prs:
+    name: PR Summary
+
+    needs:
+      - create-pr
+
+    if: always()
+
+    runs-on: self-hosted
+
+    steps:
+
+      # --------------------------------------------------------
+      # Download all PR-link artifacts
+      # --------------------------------------------------------
+      - name: Download PR links
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pr-link-*
+          path: pr-links
+          merge-multiple: true
+
+
+      # --------------------------------------------------------
+      # Print PR links one after another
+      # --------------------------------------------------------
+      - name: Print PR links in Summary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "## QA to Production Pull Requests" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          LINKS=$(find pr-links \
+            -type f \
+            -name "pr-link.txt" \
+            -exec cat {} \; 2>/dev/null \
+            | sed '/^[[:space:]]*$/d' \
+            | sort -u)
+
+          if [[ -z "$LINKS" ]]; then
+
+            echo "No pull requests were created or found." \
+              >> "$GITHUB_STEP_SUMMARY"
+
+          else
+
+            while IFS= read -r URL; do
+
+              echo "$URL" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+
+            done <<< "$LINKS"
+
+          fi
