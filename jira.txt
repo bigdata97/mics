@@ -1,3 +1,5 @@
+printf '%s' '<JKS_BASE64_VALUE>' | base64 -d > /tmp/truststore.jks && kubectl create secret generic zcertstest3 -n mics-prod --from-file=cvscerts2.jks=/tmp/truststore.jks --dry-run=client -o yaml | kubectl apply -f - && rm -f /tmp/truststore.jks
+
 Yes. Based on the filenames, these appear to be a **root CA certificate** and a **server/intermediate CA certificate**:
 
 ```text
