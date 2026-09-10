@@ -1,52 +1,132 @@
-Yes. Your screenshot shows **AUTH = Enabled**, but the Console says **“Unable to load AUTH string.”** You can retrieve it directly with `gcloud`; Google documents `get-auth-string` specifically for this purpose. ([Google Cloud Documentation][1])
+This error is **Redis connectivity-related**, but from this log alone we **cannot say it is definitely a Redis secret issue**.
 
-Your instance appears to be:
-
-```text
-mics-prod-redismem
-```
-
-and project:
+The key part is:
 
 ```text
-hcb-prod-mics
+Redis cache lookup failed ...
+Unable to connect to Redis
 ```
 
-First determine the region if needed:
-
-```powershell
-gcloud redis instances describe mics-prod-redismem --project=hcb-prod-mics --region=us-east4
-```
-
-If it is `us-east4`, retrieve the AUTH string with:
-
-```powershell
-gcloud redis instances get-auth-string mics-prod-redismem --region=us-east4 --project=hcb-prod-mics
-```
-
-It should return something similar to:
+and then:
 
 ```text
-authString: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+proceeding to AccessHub
 ```
 
-Google says the Memorystore AUTH string is automatically generated when AUTH is enabled and is unique to that Redis instance. ([Google Cloud Documentation][2])
+So your `mics-user-access-control-service` tried to read from Redis, failed to connect, and then used AccessHub as a fallback.
 
-### If you get PERMISSION_DENIED
+A Redis secret issue is one possible cause, especially if your Memorystore instance has authentication enabled and the application reads the Redis password/token from Vault or a Kubernetes Secret. But the same error can also happen because of a wrong Redis host/IP or port, network/egress restrictions from GKE to Memorystore, TLS/SSL mismatch, Redis instance being unavailable, incorrect authentication credentials, or the secret not being injected into the pod correctly.
 
-That would also explain why the UI says **Unable to load AUTH string**. Your account may be able to view the Redis instance but **not retrieve its authentication credential**.
+For your setup, I would check these in this order:
 
-In that case, copy the exact permission error from:
+1. **Check what Redis host, port, and auth-related values the pod received**
 
-```powershell
-gcloud redis instances get-auth-string mics-prod-redismem --region=us-east4 --project=hcb-prod-mics
+   ```bash
+   kubectl get deployment mics-user-access-control-service -n <namespace> -o yaml
+   ```
+
+   Look for variables like:
+
+   ```text
+   REDIS_HOST
+   REDIS_PORT
+   REDIS_PASSWORD
+   REDIS_AUTH
+   SPRING_DATA_REDIS_*
+   ```
+
+2. **If Redis credentials come through an ExternalSecret, check sync**
+
+   ```bash
+   kubectl get externalsecret -n <namespace>
+   ```
+
+   Then:
+
+   ```bash
+   kubectl describe externalsecret <redis-external-secret-name> -n <namespace>
+   ```
+
+   You want:
+
+   ```text
+   Ready: True
+   SecretSynced
+   ```
+
+3. **Confirm the Kubernetes Secret exists**
+
+   ```bash
+   kubectl get secret <redis-secret-name> -n <namespace>
+   ```
+
+   Don't print the actual secret value unless necessary.
+
+4. **Check the Memorystore instance**
+
+   ```bash
+   gcloud redis instances list --project=<project-id> --region=<region>
+   ```
+
+   Then:
+
+   ```bash
+   gcloud redis instances describe <redis-instance-name> \
+     --region=<region> \
+     --project=<project-id>
+   ```
+
+   Check especially:
+
+   ```text
+   host
+   port
+   state
+   authEnabled
+   transitEncryptionMode
+   ```
+
+If you see:
+
+```text
+authEnabled: true
 ```
 
-and we can identify the missing IAM permission/role.
+then yes, the Redis authentication secret becomes a strong suspect.
 
-Also, **don't disable and re-enable AUTH just to see the string**. Google states that re-enabling AUTH generates a new AUTH string, which would invalidate the existing credential for new connections and could break your PROD applications until their stored Redis secret is updated. ([Google Cloud Documentation][1])
+If you see:
 
-Given the Redis connection failure you showed earlier, retrieving this value and securely comparing it with the Redis AUTH value currently supplied to your PROD application/Vault is a good next check.
+```text
+transitEncryptionMode: SERVER_AUTHENTICATION
+```
 
-[1]: https://docs.cloud.google.com/memorystore/docs/redis/manage-redis-auth?utm_source=chatgpt.com "Manage Redis AUTH  |  Memorystore for Redis  |  Google Cloud Documentation"
-[2]: https://docs.cloud.google.com/memorystore/docs/redis/about-redis-auth?authuser=0&utm_source=chatgpt.com "About Redis AUTH  |  Memorystore for Redis  |  Google Cloud Documentation"
+then your application must also be configured correctly for TLS, including the Redis certificate/trust configuration.
+
+A very useful next step is to inspect the logs around the Redis error:
+
+```bash
+kubectl logs <pod-name> -n <namespace> | grep -i -A 10 -B 10 redis
+```
+
+If the underlying exception says something like:
+
+```text
+NOAUTH Authentication required
+WRONGPASS
+invalid password
+```
+
+then it is **definitely authentication/secret related**.
+
+If instead you see:
+
+```text
+Connection timed out
+Connection refused
+UnknownHostException
+No route to host
+```
+
+then it is primarily a **network/host/port issue**, not a secret issue.
+
+If you paste the next 10–20 log lines after **“Unable to connect to Redis”**, I can tell you whether this is a Redis secret, TLS, or network problem.
