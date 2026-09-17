@@ -1,4 +1,4 @@
-$urls = Get-Clipboard -Raw -Format Text; Start-Process "chrome.exe" -ArgumentList @("--new-window") + ($urls -split "`r?`n" | Where-Object { $_ -match '^https?://' })
+$urls = (Get-Clipboard -Raw) -split "\r?\n" | Where-Object { $_ -match '^https?://' }; Start-Process "chrome.exe" -ArgumentList (@("--new-window") + $urls)
 
 What happened — reconstructed timeline
 
