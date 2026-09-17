@@ -29,8 +29,42 @@ The screenshots do not indicate an application crash, OAuth redirect configurati
 
 
 
+
+
+
+
+
+
+
 QA downtime was caused by the login-service pod being replaced around 09:28 AM. During the replacement, GKE temporarily failed to pull the existing 1.0.128 image from JFrog due to a connection reset by peer. Since login-service had only one replica, there was no healthy backend endpoint during the startup delay, and Istio returned no healthy upstream. The same image subsequently pulled successfully and the new pod became healthy around 09:36, after which QA recovered. No new application build was required. We are checking GKE Audit/ArgoCD history to determine what initiated the unexpected pod/revision replacement.
 
 Resolution / preventive action
 
 The service recovered once the same 1.0.128 image was successfully pulled and the replacement pod became Ready. As preventive measures, we should identify the trigger for the unexpected replacement through GKE Audit/ArgoCD logs, review JFrog/network connectivity, and consider running at least two login-service replicas with maxUnavailable: 0, a PDB, and node distribution so a single pod/image-pull failure does not cause portal downtime.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Yes, active-active deployment would help prevent this type of outage. Earlier, due to resource constraints in the cluster and the need to allocate additional capacity to the Plan and Event Assembler services, we had reduced replicas for the other services, including Login Service, to a single replica.
+
+As a preventive measure, we are planning to move these services back to a minimum of two replicas and implement pod anti-affinity/topology distribution, so that the two replicas are scheduled on different GKE nodes rather than the same node. This provides an active-active setup at the pod level — if one pod or its underlying node becomes unavailable, the second replica can continue serving traffic.
+
+We are planning to standardize this configuration across the applicable MICS services and environments to improve overall availability and resilience.
+
+One terminology correction that is worth keeping in your response: what you described as “each replica should reside on a different node” is specifically pod anti-affinity (or topology spread constraints), rather than pod affinity. Affinity tends to place pods together; anti-affinity is what you use to keep replicas apart.
+
+
+
+
+
+
