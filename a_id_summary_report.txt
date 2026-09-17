@@ -1,17 +1,36 @@
-What I currently think happened
+What happened — reconstructed timeline
 
-Based specifically on the screenshot, my leading working hypothesis is:
+The sequence from your screenshots is very consistent:
 
-Something caused the QA login-service pod to be recreated today. The replacement pod attempted to pull the existing 1.0.128 image from JFrog. That image pull failed because the HTTPS connection to JFrog was reset. Consequently, the login-service pod never became Ready, leaving Istio without a healthy login-service upstream, which produced no healthy upstream when the QA OAuth authorization URL was accessed.
+Time on Sep 17	What happened
+09:28:52	A new active Deployment revision for mics-login-service-deploy-qa-1.0.128 was created
+~09:28:56	First replacement pod (...-xq8sp) started its Istio init/sidecar
+~09:28–09:33	Application container was unable to become available because pulling mics-login-service:1.0.128 from JFrog encountered a TCP connection reset
+09:31	Your lead reported qa.mics.cvshealth.com returning no healthy upstream
+09:33:23	Login-service application finally started in the first replacement pod
+09:33:47	That pod was intentionally/gracefully terminated
+09:33:47	Current pod ...-ms5dl was created
+09:36:45	Application container in the current pod started
+09:36:53+	Spring Boot was fully started
+09:37 onward	Login service started serving real /sso/me, token-cookie and permissions traffic again
 
-So I would investigate in this order:
 
-pod creation/restart reason → image pull failure → JFrog/network/egress → endpoints → Istio, rather than starting with OAuth redirect configuration.
+Root-cause statement for Jira
 
-Send me the output of these three commands first:
+I would use this:
 
-kubectl get pods -n mics-nonprod-qa -o wide | findstr /I "login"
-kubectl describe pod <login-pod-name> -n mics-nonprod-qa
-kubectl get events -n mics-nonprod-qa --sort-by=.lastTimestamp | findstr /I "login pull image node kill evict"
+Root Cause Analysis:
+On Sep 17 at approximately 09:28 EDT, the QA mics-login-service workload underwent a new revision/pod lifecycle operation even though no new application image was deployed; the workload continued to use image version 1.0.128. During creation of the replacement pod, the GKE node attempted to pull the existing image from the JFrog registry and encountered a network-level connection reset (read tcp ... -> 34.48.29.74:443: connection reset by peer). This delayed the login-service application container from starting and becoming Ready. Since the login service was running with only one available replica, there were temporarily no healthy backend endpoints for the Istio route, causing qa.mics.cvshealth.com to return “no healthy upstream.”
 
-With those, I can help you determine what caused the pod to be recreated on September 17 and why the image pull subsequently failed, instead of using another build as a temporary workaround.
+The first replacement pod later started successfully but was subsequently terminated through a graceful Kubernetes/Istio shutdown, after which another pod was created on a different node. The second pod successfully started the same 1.0.128 image at approximately 09:36 and the QA login flow recovered. Application logs after 09:37 confirm successful SSO/user-info/token/permissions processing.
+
+The screenshots do not indicate an application crash, OAuth redirect configuration issue, or invalid container image. The immediate outage was caused by pod replacement combined with a transient JFrog image-pull/connectivity failure. Additional GKE audit/ArgoCD review is required to identify the actor that initiated the workload/revision change at approximately 09:28.
+
+
+
+
+QA downtime was caused by the login-service pod being replaced around 09:28 AM. During the replacement, GKE temporarily failed to pull the existing 1.0.128 image from JFrog due to a connection reset by peer. Since login-service had only one replica, there was no healthy backend endpoint during the startup delay, and Istio returned no healthy upstream. The same image subsequently pulled successfully and the new pod became healthy around 09:36, after which QA recovered. No new application build was required. We are checking GKE Audit/ArgoCD history to determine what initiated the unexpected pod/revision replacement.
+
+Resolution / preventive action
+
+The service recovered once the same 1.0.128 image was successfully pulled and the replacement pod became Ready. As preventive measures, we should identify the trigger for the unexpected replacement through GKE Audit/ArgoCD logs, review JFrog/network connectivity, and consider running at least two login-service replicas with maxUnavailable: 0, a PDB, and node distribution so a single pod/image-pull failure does not cause portal downtime.
