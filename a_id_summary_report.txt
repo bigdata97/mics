@@ -45,3 +45,142 @@ spec:
               port: 8080
             periodSeconds: 10
             failureThreshold: 3
+
+
+
+
+
+
+
+
+
+app:
+  name: mics-ui-components
+  port: 8080
+
+appData:
+  namespace: mics-nonprod-dev
+  appVersion: dev
+  dockerHub: cvsh.jfrog.io
+  dockerImageGroupName: cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components
+  dockerImageName: mics-ui-components
+  dockerImageTag: "1.0.6"
+
+deployment:
+  enabled: true
+
+image:
+  repository: cvsh.jfrog.io/cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components/mics-ui-components
+  tag: "1.0.6"
+  pullPolicy: IfNotPresent
+
+imagePullSecrets:
+  - name: artifactory-registry
+
+# Keep at least 2 pods running
+replicaCount: 2
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: 500m
+    memory: 1Gi
+
+envVars:
+  - name: PORT
+    value: "8080"
+
+  - name: VITE_APP_ENV
+    value: "dev"
+
+  - name: LOG_LEVEL
+    value: "INFO"
+
+
+# ---------------------------------------------------------
+# HEALTH PROBES
+# ---------------------------------------------------------
+
+livenessProbeDetails:
+  probePath: /
+  initialDelaySeconds: 90
+  periodSeconds: 20
+  timeoutSeconds: 3
+  failureThreshold: 5
+
+readinessProbeDetails:
+  probePath: /
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 3
+  failureThreshold: 6
+
+startupProbeDetails:
+  probePath: /
+  initialDelaySeconds: 60
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 10
+
+
+# ---------------------------------------------------------
+# HORIZONTAL POD AUTOSCALER
+# ---------------------------------------------------------
+
+hpaSettings:
+  minReplicas: 2
+  maxReplicas: 5
+  averageUtilization: 70
+
+
+# ---------------------------------------------------------
+# HIGH AVAILABILITY / ROLLING UPDATE
+# ---------------------------------------------------------
+
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
+
+terminationGracePeriodSeconds: 60
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app: mics-ui-components
+          topologyKey: kubernetes.io/hostname
+
+
+# ---------------------------------------------------------
+# ISTIO
+# ---------------------------------------------------------
+
+istio:
+  enabled: true
+  prodWeightage: 100
+  canaryWeightage: 0
+  currentAppVersion: dev
+  canaryAppVersion: dev
+  authPolicy:
+    rules:
+      - from:
+          - source:
+              principals:
+                - cluster.local/ns/mics-nonprod-dev/sa/mics-ui-components
+        to:
+          - operation: {}
+
+skipSecurityContext: true
+
+
+
+
+
+
