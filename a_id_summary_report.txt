@@ -1,140 +1,35 @@
-Basically, so that is related to some pod affinity things. So as you suggested, I'm going to change, yeah, the pod my deployment.yaml file for pod affinity and other things and other strategy. So here in this, in the context, so on my left side there are three different repos. So two different repos. So one is MSCS GitOps and another one is GitOps- Microservices- Helm- Template. And under the MSCS GitOps repo, under the folder .github, there is some workflow called common CD.yaml file. So we are going to use that common CD.yaml file for updating the deployment files for every service. So basically in that what we are doing is we are going to maintain our templates, deployment templates under the deploy config folder, and inside that for each service there are specific folders like dev, dev2, UAT, QA, etc. And while running that common CD file, it will just directly dump, get the latest code from GitOps microservices Helm template repo, and inside that it will execute some kind of updating the Helm values. I don't know what file dynamically it will, but you need to go through the common CD file and get to know what file it will refer to for updating the Helm values from the GitOps microservices Helm template repo on my left side. And inside that, like what exactly it is getting, so from our application, like from our deploy config folder, and what are the values that it is hardcoded inside the GitOps microservices Helm template. So basically my problem is I defined PodAffinity and then there is some strategy, like max available and like that. But those are not getting reflected when the actual deployment file is generated. So my question is, there might be some file it is referring to inside the GitOps microservices Helm template, and I would like to see what is the code existing over there and how to do that. So yeah, do that deep analysis on that and then give me the correct solution.
+Here is a clear English prompt you can give to Claude Code, ChatGPT, or another coding agent that has access to your mics-ui-components repository:
+I need you to analyze a UI rendering inconsistency in our React application repository, mics-ui-components.
+We have two environments/branches: DEV2 and UIT. The same or equivalent UI code was deployed to both environments, but the UI is rendering differently.
+I have attached two screenshots showing the issue:
+- In the DEV2 portal, the page contains a tab, a search section below the tab, and a table below the search section. The spacing/alignment between these components looks correct.
+- In the UIT portal, after deploying the same code changes, the table position/spacing is different. There appears to be additional or incorrect space between the search area and the table, even though we expect the UI to look exactly like DEV2.
+Please perform a root-cause analysis based on the actual mics-ui-components codebase. Do not just suggest generic CSS possibilities.
+Specifically, compare the DEV2 and UIT implementations/configurations and investigate:
+1. The React components responsible for the tab, search section, and table.
+2. CSS/SCSS/styles affecting these components, especially margin, padding, gap, height, min-height, position, flex/grid properties, and responsive styles.
+3. Parent/container components that could be introducing additional spacing.
+4. Conditional rendering based on environment.
+5. Environment variables and configuration differences between DEV2 and UIT.
+6. Whether different CSS bundles, component-library versions, dependencies, or build artifacts are being used.
+7. Compare package.json and package-lock.json where relevant.
+8. Check whether DEV2 and UIT actually contain the same commit/code for the affected components.
+9. Check for branch-specific changes that may not have been merged correctly from DEV2 into UIT.
+10. Check whether browser caching, stale static assets, or an older deployed image/build could cause UIT to display an older UI.
+11. Check whether API/data differences could change component height or conditional elements and indirectly move the table.
+12. Check for environment-specific feature flags or hidden elements that may still occupy layout space.
+Use the screenshots as visual evidence, but validate your conclusions against the repository code.
+I want you to identify the most likely actual root cause, not just provide a list of possibilities. Trace the layout from the page-level component down to the table and identify exactly which component/style/configuration is responsible for the difference.
+For every relevant finding, provide the file name, component name, and exact code/style responsible.
+Finally, give me:
+- Root cause
+- Why DEV2 looks correct
+- Why UIT looks different
+- Exact code/configuration difference
+- Recommended fix
+- Files that need to be changed
+- How to verify the fix locally
+- How to verify it after deployment to UIT
+Do not modify any code initially. First complete the analysis and show me the evidence. After I review the root cause, I will ask you to implement the fix.
 
-
-
-
-
-
-
-
-
-app:
-  name: mics-ui-components
-  port: 8080
-
-appData:
-  namespace: mics-nonprod-dev
-  appVersion: dev
-  dockerHub: cvsh.jfrog.io
-  dockerImageGroupName: cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components
-  dockerImageName: mics-ui-components
-  dockerImageTag: "1.0.6"
-
-deployment:
-  enabled: true
-
-image:
-  repository: cvsh.jfrog.io/cvsdigital-docker/ghemu/cvs-health-source-code/mics-ui-components/mics-ui-components
-  tag: "1.0.6"
-  pullPolicy: IfNotPresent
-
-imagePullSecrets:
-  - name: artifactory-registry
-
-# Keep at least 2 pods running
-replicaCount: 2
-
-resources:
-  requests:
-    cpu: 250m
-    memory: 512Mi
-  limits:
-    cpu: 500m
-    memory: 1Gi
-
-envVars:
-  - name: PORT
-    value: "8080"
-
-  - name: VITE_APP_ENV
-    value: "dev"
-
-  - name: LOG_LEVEL
-    value: "INFO"
-
-
-# ---------------------------------------------------------
-# HEALTH PROBES
-# ---------------------------------------------------------
-
-livenessProbeDetails:
-  probePath: /
-  initialDelaySeconds: 90
-  periodSeconds: 20
-  timeoutSeconds: 3
-  failureThreshold: 5
-
-readinessProbeDetails:
-  probePath: /
-  initialDelaySeconds: 60
-  periodSeconds: 10
-  timeoutSeconds: 3
-  failureThreshold: 6
-
-startupProbeDetails:
-  probePath: /
-  initialDelaySeconds: 60
-  periodSeconds: 5
-  timeoutSeconds: 3
-  failureThreshold: 10
-
-
-# ---------------------------------------------------------
-# HORIZONTAL POD AUTOSCALER
-# ---------------------------------------------------------
-
-hpaSettings:
-  minReplicas: 2
-  maxReplicas: 5
-  averageUtilization: 70
-
-
-# ---------------------------------------------------------
-# HIGH AVAILABILITY / ROLLING UPDATE
-# ---------------------------------------------------------
-
-strategy:
-  type: RollingUpdate
-  rollingUpdate:
-    maxUnavailable: 0
-    maxSurge: 1
-
-terminationGracePeriodSeconds: 60
-
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchLabels:
-              app: mics-ui-components
-          topologyKey: kubernetes.io/hostname
-
-
-# ---------------------------------------------------------
-# ISTIO
-# ---------------------------------------------------------
-
-istio:
-  enabled: true
-  prodWeightage: 100
-  canaryWeightage: 0
-  currentAppVersion: dev
-  canaryAppVersion: dev
-  authPolicy:
-    rules:
-      - from:
-          - source:
-              principals:
-                - cluster.local/ns/mics-nonprod-dev/sa/mics-ui-components
-        to:
-          - operation: {}
-
-skipSecurityContext: true
-
-
-
-
-
-
+This last instruction—“Do not modify any code initially”—is important when giving this to Claude Code because you want it to investigate the branch/build/environment difference before automatically changing CSS.
