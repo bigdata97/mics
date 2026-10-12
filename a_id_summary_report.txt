@@ -1,35 +1,33 @@
-Here is a clear English prompt you can give to Claude Code, ChatGPT, or another coding agent that has access to your mics-ui-components repository:
-I need you to analyze a UI rendering inconsistency in our React application repository, mics-ui-components.
-We have two environments/branches: DEV2 and UIT. The same or equivalent UI code was deployed to both environments, but the UI is rendering differently.
-I have attached two screenshots showing the issue:
-- In the DEV2 portal, the page contains a tab, a search section below the tab, and a table below the search section. The spacing/alignment between these components looks correct.
-- In the UIT portal, after deploying the same code changes, the table position/spacing is different. There appears to be additional or incorrect space between the search area and the table, even though we expect the UI to look exactly like DEV2.
-Please perform a root-cause analysis based on the actual mics-ui-components codebase. Do not just suggest generic CSS possibilities.
-Specifically, compare the DEV2 and UIT implementations/configurations and investigate:
-1. The React components responsible for the tab, search section, and table.
-2. CSS/SCSS/styles affecting these components, especially margin, padding, gap, height, min-height, position, flex/grid properties, and responsive styles.
-3. Parent/container components that could be introducing additional spacing.
-4. Conditional rendering based on environment.
-5. Environment variables and configuration differences between DEV2 and UIT.
-6. Whether different CSS bundles, component-library versions, dependencies, or build artifacts are being used.
-7. Compare package.json and package-lock.json where relevant.
-8. Check whether DEV2 and UIT actually contain the same commit/code for the affected components.
-9. Check for branch-specific changes that may not have been merged correctly from DEV2 into UIT.
-10. Check whether browser caching, stale static assets, or an older deployed image/build could cause UIT to display an older UI.
-11. Check whether API/data differences could change component height or conditional elements and indirectly move the table.
-12. Check for environment-specific feature flags or hidden elements that may still occupy layout space.
-Use the screenshots as visual evidence, but validate your conclusions against the repository code.
-I want you to identify the most likely actual root cause, not just provide a list of possibilities. Trace the layout from the page-level component down to the table and identify exactly which component/style/configuration is responsible for the difference.
-For every relevant finding, provide the file name, component name, and exact code/style responsible.
-Finally, give me:
-- Root cause
-- Why DEV2 looks correct
-- Why UIT looks different
-- Exact code/configuration difference
-- Recommended fix
-- Files that need to be changed
-- How to verify the fix locally
-- How to verify it after deployment to UIT
-Do not modify any code initially. First complete the analysis and show me the evidence. After I review the root cause, I will ask you to implement the fix.
+Hi [Manager Name], Good morning!
 
-This last instruction—“Do not modify any code initially”—is important when giving this to Claude Code because you want it to investigate the branch/build/environment difference before automatically changing CSS.
+I came across your LinkedIn post regarding the Senior Data Engineer and Senior Decision Scientist openings at CVS Health.
+
+I'm currently working with CVS as well and wanted to reach out regarding a potential referral. I have a friend who I believe could be a strong candidate for these opportunities.
+
+He has around 11 years of professional experience, holds a PhD, and has a strong background in Machine Learning, Data Science, and Data Engineering. He is currently working at a research laboratory in Chicago.
+
+Given his experience and technical expertise, I believe he could be a great fit for your team.
+
+Would you be open to reviewing his resume? I'd be happy to share it with you.
+
+Thank you!
+
+
+Hi [Manager Name],
+
+I noticed your LinkedIn post about the Senior Data Engineer and Senior Decision Scientist openings at CVS.
+
+I'm also working with CVS and wanted to refer a friend who has an impressive technical and research background. He has 11 years of experience, a PhD, and strong expertise in Machine Learning, Data Science, and Data Engineering. He's currently working at a research lab in Chicago.
+
+I believe he'd be a strong candidate for these roles. Would it be okay if I shared his resume with you for consideration?
+
+Thanks!
+
+
+
+
+
+
+Thank you for your response! Please find his resume attached for your review. I genuinely believe his combination of industry experience and PhD-level research expertise could add great value to your team.
+
+I appreciate your time and consideration!
