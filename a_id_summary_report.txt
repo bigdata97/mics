@@ -1,5 +1,7 @@
-The security configuration issue related to the /login endpoint, which was preventing the login service from starting successfully after a new deployment in DEV, has been resolved.
+We have implemented an Active-Active deployment strategy for the MICS services using multiple replicas and pod anti-affinity.
 
-As part of the same changes, the active-active deployment strategy was implemented and validated. The service is now up and running successfully.
+As part of the validation, we are verifying that a minimum of two healthy replicas are running on different GKE nodes and that both are registered as healthy service endpoints.
 
-Next Steps: Extend the active-active deployment configuration to the remaining services in the DEV environment and validate their deployment, availability, and stability before proceeding to higher environments.
+We will also perform a controlled pod failover test in QA by terminating one replica and verifying that the application remains accessible through the surviving replica while Kubernetes automatically provisions a replacement.
+
+This strategy is intended to minimize service disruptions caused by individual pod or node failures and improve application availability across environments.
