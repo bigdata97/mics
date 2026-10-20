@@ -1,7 +1,15 @@
-We have implemented an Active-Active deployment strategy for the MICS services using multiple replicas and pod anti-affinity.
+We have an existing frontend application hosted at https://dev.mics.cvshealth.com.
 
-As part of the validation, we are verifying that a minimum of two healthy replicas are running on different GKE nodes and that both are registered as healthy service endpoints.
+Previously, whenever users entered a logo code in the search field, the frontend would call the Logos API using the same hostname (dev.mics.cvshealth.com) followed by the respective API endpoint to fetch and display the logo.
 
-We will also perform a controlled pod failover test in QA by terminating one replica and verifying that the application remains accessible through the surviving replica while Kubernetes automatically provisions a replacement.
+Recently, we changed the integration so that instead of calling the backend through the existing DEV portal hostname, the frontend now calls the Apigee API hostname directly, followed by the Logos API endpoint.
 
-This strategy is intended to minimize service disruptions caused by individual pod or node failures and improve application availability across environments.
+Since the frontend is hosted on dev.mics.cvshealth.com but the API requests are now being sent to a different hostname (Apigee), I have a question regarding the CORS configuration.
+
+My question is:
+
+Do we need to add the new Apigee API URL/hostname to the allowedOrigins configuration in our frontend application's web.config file to allow these cross-origin requests?
+
+Or should the CORS configuration be updated on the Apigee/API backend side to explicitly allow requests originating from https://dev.mics.cvshealth.com?
+
+What is the correct approach to resolve this CORS issue, considering that the frontend and API are now hosted on different domains?
