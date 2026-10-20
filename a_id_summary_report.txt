@@ -1,15 +1,18 @@
-We have an existing frontend application hosted at https://dev.mics.cvshealth.com.
+How can you test it yourself?
+Open Chrome DevTools → Network, enter a logo code, and inspect the API request.
+Check for an OPTIONS preflight request and whether the response includes the expected CORS headers.
+You can also test the preflight using curl:
+curl -i -X OPTIONS \
+  'https://<apigee-hostname>/<logos-endpoint>' \
+  -H 'Origin: https://dev.mics.cvshealth.com' \
+  -H 'Access-Control-Request-Method: GET' \
+  -H 'Access-Control-Request-Headers: authorization,content-type'
 
-Previously, whenever users entered a logo code in the search field, the frontend would call the Logos API using the same hostname (dev.mics.cvshealth.com) followed by the respective API endpoint to fetch and display the logo.
 
-Recently, we changed the integration so that instead of calling the backend through the existing DEV portal hostname, the frontend now calls the Apigee API hostname directly, followed by the Logos API endpoint.
+A successful preflight should return a 2xx status and appropriate headers, such as:
+Access-Control-Allow-Origin: https://dev.mics.cvshealth.com
+Access-Control-Allow-Methods: GET, OPTIONS
+Access-Control-Allow-Headers: Authorization, Content-Type
 
-Since the frontend is hosted on dev.mics.cvshealth.com but the API requests are now being sent to a different hostname (Apigee), I have a question regarding the CORS configuration.
 
-My question is:
-
-Do we need to add the new Apigee API URL/hostname to the allowedOrigins configuration in our frontend application's web.config file to allow these cross-origin requests?
-
-Or should the CORS configuration be updated on the Apigee/API backend side to explicitly allow requests originating from https://dev.mics.cvshealth.com?
-
-What is the correct approach to resolve this CORS issue, considering that the frontend and API are now hosted on different domains?
+If the preflight fails, inspect the response status and headers. An HTTP 401, 403, 404, or 400 may indicate that routing, authentication, or security policies are rejecting the OPTIONS request before CORS handling completes.
