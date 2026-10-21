@@ -1,55 +1,196 @@
-How to Dynamically Retrieve a Vault Secret and Use It in a React/Vite Frontend Application Deployed on Kubernetes
+Your MICS UI Components deployment is failing because the DEV namespace has almost reached its Kubernetes CPU limit quota.
 
-We have an existing frontend application called MICS UI Components, which is developed using React and Vite and deployed on Google Kubernetes Engine (GKE).
+This is a Kubernetes `ResourceQuota` issue, not an application code issue, Docker image issue, or Vault secret issue.
 
-Our application deployment is managed through Kubernetes manifests, GitOps, and ArgoCD.
+## 1. Understanding your exact error
 
-Current Requirement
+Your screenshot shows:
 
-I recently created a secret in HashiCorp Vault. I now need to retrieve that secret dynamically and make its value available to our MICS UI Components application.
+```
+pods "mics-ui-components-deploy-dev-1.0.576-..." is forbidden:
 
-We already use External Secrets Operator (ESO) to synchronize secrets from HashiCorp Vault into Kubernetes Secrets.
+exceeded quota: mics-nonprod-dev-quota
 
-The requirement is as follows:
+requested: limits.cpu=1500m
+used: limits.cpu=47850m
+limited: limits.cpu=48
+```
 
-A secret containing an API key is stored in HashiCorp Vault.
+Let's break it down.
 
-The secret should be retrieved from Vault through our existing External Secrets Operator integration.
+| Parameter              | Value              | Meaning                            |
+| ---------------------- | ------------------ | ---------------------------------- |
+| Namespace              | `mics-nonprod-dev` | DEV environment                    |
+| CPU quota              | 48 cores           | Maximum total CPU limits permitted |
+| CPU already allocated  | 47.85 cores        | Existing pod CPU limits            |
+| New pod CPU limit      | 1.5 cores          | Additional CPU limit requested     |
+| Total after deployment | 49.35 cores        | Exceeds quota                      |
 
-The synchronized Kubernetes Secret should be referenced in the MICS UI Components Kubernetes Deployment YAML using an environment variable.
+Current CPU quota utilization
 
-Our React application contains an index.ts file where an x-api-key value is currently defined or used.
+99.7%
 
-Instead of hardcoding the API key in index.ts, I want the application to retrieve its value dynamically from the environment variable configured in the Kubernetes Deployment.
+47.85 cores allocated
 
-The solution should work with our existing React/Vite application architecture and GitOps deployment process.
+48 cores quota
 
-My Questions
+Only 150m CPU quota remains, but the new pod requires 1500m.
 
-1. Vault to Kubernetes Integration
+Important: Kubernetes is calculating the sum of configured CPU limits, not actual CPU utilization. Even if your pods are consuming very little CPU, you can still hit this quota.
 
-How should I configure the ExternalSecret resource to retrieve the API key from HashiCorp Vault and synchronize it into a Kubernetes Secret?
+## 2. How to verify using kubectl
 
-Please provide an example ExternalSecret YAML manifest using an existing namespace-scoped SecretStore.
+Run these commands.
 
-2. Kubernetes Deployment Configuration
+Step 1: Check the namespace quota
 
-How can I reference the synchronized Kubernetes Secret in the MICS UI Components Deployment YAML using env and valueFrom.secretKeyRef?
+```
+kubectl describe resourcequota mics-nonprod-dev-quota \
+  -n mics-nonprod-dev
+```
 
-Please provide a complete example.
+Or:
 
-3. React/Vite Environment Variable Access
+```
+kubectl get resourcequota -n mics-nonprod-dev
+```
 
-Since MICS UI Components is a React/Vite frontend application, can I directly access a Kubernetes environment variable inside index.ts using process.env or import.meta.env?
+Step 2: Check CPU limits for all containers in the namespace
 
-If not, explain why Kubernetes container environment variables are not automatically available to browser-based React applications.
+```
+kubectl get pods -n mics-nonprod-dev \
+  -o custom-columns='POD:.metadata.name,CPU_LIMITS:.spec.containers[*].resources.limits.cpu'
+```
 
-4. Runtime Environment Variable Injection
+This will help identify which workloads have large configured CPU limits.
 
-Our application uses Vite, and we want to avoid rebuilding the Docker image whenever an environment-specific configuration changes.
+Step 3: Check your UI deployment
 
-What is the recommended approach to inject runtime configuration into the React application?
+```
+kubectl get deployments -n mics-nonprod-dev | grep ui-components
+```
 
-For example, can we generate an env.js file at container startup and load it through index.html, making configuration available through window inside index.ts?
+Then inspect the actual deployment name:
 
-Please explain with examples of the Kubernetes Deployment YAML, container startup script, env.js, index.html, and TypeScript code.
+```
+kubectl describe deployment <deployment-name> \
+  -n mics-nonprod-dev
+```
+
+## 3. How to fix it
+
+There are three main approaches.
+
+### Option 1: Reduce CPU limits for workloads where appropriate
+
+Suppose your UI deployment currently has:
+
+```
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 1500m
+    memory: 1Gi
+```
+
+If monitoring confirms that your React UI container can operate safely with lower CPU limits, you could adjust it to:
+
+```
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+```
+
+This would reduce its CPU-limit quota requirement from 1500m to 500m.
+
+However, your namespace currently has only 150m remaining. Reducing this pod to 500m alone will not resolve the problem. You would also need to free additional quota or increase the namespace quota.
+
+For GitOps-managed applications, make these changes in the GitOps repository rather than relying on temporary manual patches.
+
+### Option 2: Increase the namespace CPU quota
+
+If your cluster has sufficient allocatable resources and your infrastructure team approves it, increase the DEV namespace quota.
+
+For example:
+
+```
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: mics-nonprod-dev-quota
+  namespace: mics-nonprod-dev
+spec:
+  hard:
+    limits.cpu: "56"
+```
+
+This is only an illustrative manifest. Do not apply it as a replacement without preserving the other existing quota settings, including memory, requests, and object-count limits.
+
+Also, increasing a namespace quota does not create additional cluster CPU capacity.
+
+### Option 3: Scale down unused DEV workloads
+
+If you have unused or temporary deployments, you can scale them down to release quota.
+
+```
+kubectl scale deployment <deployment-name> \
+  --replicas=0 \
+  -n mics-nonprod-dev
+```
+
+When their pods terminate, their CPU-limit quota allocation is released.
+
+Be careful: scaling down active services causes downtime. Also, ArgoCD auto-sync or another controller may restore the original replica count.
+
+## 4. Why did this happen during deployment?
+
+This is especially relevant to your MICS GitOps deployment strategy.
+
+During a rolling deployment, Kubernetes may temporarily create an additional pod before terminating the old pod.
+
+For example:
+
+- Existing UI pod: 1500m CPU limit
+- New UI pod: 1500m CPU limit
+- Additional quota required during rollout: 1500m
+
+If the namespace has insufficient remaining quota, the new pod cannot be created, and the rollout gets stuck.
+
+You can inspect the deployment strategy:
+
+```
+kubectl get deployment <deployment-name> \
+  -n mics-nonprod-dev \
+  -o jsonpath='{.spec.strategy}'
+```
+
+If `maxSurge` allows additional pods, the rollout needs quota for those extra pods.
+
+Changing `maxSurge` to `0` with a suitable `maxUnavailable` can reduce temporary quota requirements, but it may reduce availability during rollout. I would not recommend that as the first fix, especially given your active-active deployment requirement.
+
+## 5. My recommendation for your environment
+
+I would follow this sequence:
+
+1. Check the existing namespace ResourceQuota.
+2. Identify unused pods or deployments consuming CPU-limit quota.
+3. Verify whether the UI deployment is creating an additional pod during a rolling update.
+4. Free at least 1350m additional quota for one new 1500m pod, preferably with some headroom, or request an appropriate quota increase.
+5. Let ArgoCD/Kubernetes retry the deployment and verify the rollout.
+
+Once sufficient quota is available, run:
+
+```
+kubectl rollout status deployment/<deployment-name> \
+  -n mics-nonprod-dev
+```
+
+One important question: Is your `mics-ui-components` deployment currently configured with `replicas: 1` or `replicas: 2`?
+
+Because if you are implementing active-active deployments with two replicas, we need to calculate CPU quota requirements for both replicas and any additional surge pods during rolling updates.
