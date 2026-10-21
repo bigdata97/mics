@@ -1,18 +1,55 @@
-How can you test it yourself?
-Open Chrome DevTools → Network, enter a logo code, and inspect the API request.
-Check for an OPTIONS preflight request and whether the response includes the expected CORS headers.
-You can also test the preflight using curl:
-curl -i -X OPTIONS \
-  'https://<apigee-hostname>/<logos-endpoint>' \
-  -H 'Origin: https://dev.mics.cvshealth.com' \
-  -H 'Access-Control-Request-Method: GET' \
-  -H 'Access-Control-Request-Headers: authorization,content-type'
+How to Dynamically Retrieve a Vault Secret and Use It in a React/Vite Frontend Application Deployed on Kubernetes
 
+We have an existing frontend application called MICS UI Components, which is developed using React and Vite and deployed on Google Kubernetes Engine (GKE).
 
-A successful preflight should return a 2xx status and appropriate headers, such as:
-Access-Control-Allow-Origin: https://dev.mics.cvshealth.com
-Access-Control-Allow-Methods: GET, OPTIONS
-Access-Control-Allow-Headers: Authorization, Content-Type
+Our application deployment is managed through Kubernetes manifests, GitOps, and ArgoCD.
 
+Current Requirement
 
-If the preflight fails, inspect the response status and headers. An HTTP 401, 403, 404, or 400 may indicate that routing, authentication, or security policies are rejecting the OPTIONS request before CORS handling completes.
+I recently created a secret in HashiCorp Vault. I now need to retrieve that secret dynamically and make its value available to our MICS UI Components application.
+
+We already use External Secrets Operator (ESO) to synchronize secrets from HashiCorp Vault into Kubernetes Secrets.
+
+The requirement is as follows:
+
+A secret containing an API key is stored in HashiCorp Vault.
+
+The secret should be retrieved from Vault through our existing External Secrets Operator integration.
+
+The synchronized Kubernetes Secret should be referenced in the MICS UI Components Kubernetes Deployment YAML using an environment variable.
+
+Our React application contains an index.ts file where an x-api-key value is currently defined or used.
+
+Instead of hardcoding the API key in index.ts, I want the application to retrieve its value dynamically from the environment variable configured in the Kubernetes Deployment.
+
+The solution should work with our existing React/Vite application architecture and GitOps deployment process.
+
+My Questions
+
+1. Vault to Kubernetes Integration
+
+How should I configure the ExternalSecret resource to retrieve the API key from HashiCorp Vault and synchronize it into a Kubernetes Secret?
+
+Please provide an example ExternalSecret YAML manifest using an existing namespace-scoped SecretStore.
+
+2. Kubernetes Deployment Configuration
+
+How can I reference the synchronized Kubernetes Secret in the MICS UI Components Deployment YAML using env and valueFrom.secretKeyRef?
+
+Please provide a complete example.
+
+3. React/Vite Environment Variable Access
+
+Since MICS UI Components is a React/Vite frontend application, can I directly access a Kubernetes environment variable inside index.ts using process.env or import.meta.env?
+
+If not, explain why Kubernetes container environment variables are not automatically available to browser-based React applications.
+
+4. Runtime Environment Variable Injection
+
+Our application uses Vite, and we want to avoid rebuilding the Docker image whenever an environment-specific configuration changes.
+
+What is the recommended approach to inject runtime configuration into the React application?
+
+For example, can we generate an env.js file at container startup and load it through index.html, making configuration available through window inside index.ts?
+
+Please explain with examples of the Kubernetes Deployment YAML, container startup script, env.js, index.html, and TypeScript code.
