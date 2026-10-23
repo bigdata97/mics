@@ -1,7 +1,9 @@
-Investigated high memory utilization (~90%) in the MICS Group Force Event Assembler Service in the QA environment, while CPU utilization remained within acceptable limits.
+**1. XAPI_KEY – UI Components Service**
+- Resolved the issue with reading and consuming the existing XAPI_KEY secret in the UI Components service and implemented the necessary fixes.
 
-Scaled the deployment from 1 to 3 pods and updated the deployment configurations to improve resource availability and processing capacity.
+**2. MACS SMTP Relay Request**
+- Coordinated with the Security team to review SMTP relay requirements, guidelines, and prerequisites. Documented the discussion summary and shared it with Sandhya.
+- Working on narrowing down the source IP range to a minimal subset as requested by the Security team. Confluence documentation is in progress.
 
-Created and configured the X-API-Key secret in Vault and implemented the required changes in the MICS UI Components repository to enable dynamic secret consumption in GKE.
-
-Verified successful secret retrieval and accessibility from the application. Implementation is complete, with final validation currently in progress by Persona.
+**3. Production Deployment**
+- Supported production deployment activities, including deployment coordination and validation.
