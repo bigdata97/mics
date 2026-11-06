@@ -1,54 +1,158 @@
-To find the CIDR range (IP address range) of a particular GKE cluster, use these commands.
+To get all CIDR ranges associated with a particular GKE cluster, including Node CIDR, Pod CIDR, Service CIDR, and VPC subnet ranges, use the following commands.
 
-### 1. Find the cluster's Pod and Service CIDR ranges
+Since you're working with GKE in your MICS project, I'll show commands using your `hcb-nonprod-msas` project.
 
-```
-gcloud container clusters describe CLUSTER_NAME \
-  --region REGION \
-  --project PROJECT_ID \
-  --format="yaml(clusterIpv4Cidr,servicesIpv4Cidr,ipAllocationPolicy)"
-```
-
-Replace `CLUSTER_NAME`, `REGION`, and `PROJECT_ID` with your values.
-
-### 2. Find CIDR ranges using kubectl
-
-First, switch to the correct cluster context:
+## 1. Set your project and identify the cluster
 
 ```
-kubectl config current-context
+PROJECT_ID="hcb-nonprod-msas"
+
+gcloud container clusters list \
+  --project="$PROJECT_ID" \
+  --format="table(name,location,network,subnetwork)"
 ```
 
-Find Pod CIDR ranges allocated to nodes:
+From the output, identify your cluster name and location.
 
 ```
-kubectl get nodes -o custom-columns=NODE:.metadata.name,POD_CIDR:.spec.podCIDR
+CLUSTER_NAME="YOUR_CLUSTER_NAME"
+LOCATION="YOUR_CLUSTER_REGION_OR_ZONE"
 ```
 
-Find Pod CIDR ranges for all nodes:
+## 2. Get all cluster-level CIDR information
+
+This is the most useful starting command:
 
 ```
-kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.podCIDR}{"\n"}{end}'
+gcloud container clusters describe "$CLUSTER_NAME" \
+  --location="$LOCATION" \
+  --project="$PROJECT_ID" \
+  --format="yaml(
+    network,
+    subnetwork,
+    clusterIpv4Cidr,
+    servicesIpv4Cidr,
+    ipAllocationPolicy
+  )"
 ```
 
-### 3. Find the cluster's subnet and secondary IP ranges
+This displays the cluster's network configuration, including primary and additional Pod ranges and Service range information where available.
+
+## 3. Get the CIDR allocated to each node
 
 ```
-gcloud compute networks subnets describe SUBNET_NAME \
-  --region REGION \
-  --project PROJECT_ID \
+kubectl get nodes \
+  -o custom-columns="NODE:.metadata.name,POD_CIDR:.spec.podCIDR,INTERNAL_IP:.status.addresses[?(@.type=='InternalIP')].address"
+```
+
+Example output:
+
+```
+NODE          POD_CIDR          INTERNAL_IP
+gke-node-1    10.20.0.0/24      10.10.0.5
+gke-node-2    10.20.1.0/24      10.10.0.6
+gke-node-3    10.20.2.0/24      10.10.0.7
+```
+
+Note: These are node-specific Pod CIDRs, not the primary subnet CIDR used to assign node IP addresses.
+
+## 4. Get primary and secondary subnet CIDR ranges
+
+First, retrieve the subnet name and VPC:
+
+```
+gcloud container clusters describe "$CLUSTER_NAME" \
+  --location="$LOCATION" \
+  --project="$PROJECT_ID" \
+  --format="yaml(network,subnetwork)"
+```
+
+Then retrieve all CIDR ranges configured on that subnet:
+
+```
+REGION="${LOCATION%-*}"
+SUBNET_NAME="YOUR_SUBNET_NAME"
+
+gcloud compute networks subnets describe "$SUBNET_NAME" \
+  --region="$REGION" \
+  --project="$PROJECT_ID" \
   --format="yaml(ipCidrRange,secondaryIpRanges)"
 ```
 
-### Important distinction
+For a zonal cluster, `LOCATION` should be something like `us-central1-a`, and `REGION` becomes `us-central1`. For a regional cluster, use its region directly.
 
-| CIDR type            | Purpose                                      |
-| -------------------- | -------------------------------------------- |
-| Node subnet CIDR     | IP addresses assigned to GKE nodes           |
-| Pod CIDR             | IP addresses assigned to Pods                |
-| Service CIDR         | Internal Kubernetes Service IP addresses     |
-| Cloud NAT public IPs | Outbound source IPs seen by external systems |
+Example output (illustrative):
 
-One question: Are you trying to find the Pod CIDR, Node CIDR, Service CIDR, or Cloud NAT outbound IP range for your GKE cluster?
+```
+ipCidrRange: 10.10.0.0/20
+secondaryIpRanges:
+- rangeName: mics-pods
+  ipCidrRange: 10.20.0.0/16
+- rangeName: mics-services
+  ipCidrRange: 10.30.0.0/20
+```
 
-These are different, especially if you're finding source IPs for a firewall or SMTP relay request.
+A secondary range can be shared or allocated to a different cluster, so compare the range names against your cluster's `ipAllocationPolicy`.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://docs.cloud.google.com\&sz=32)
+
+Google Cloud Documentation+1
+
+
+
+## 5. Get Cloud NAT outbound IP addresses
+
+If you need the source IPs your cluster uses to connect to external systems, such as an SMTP relay, first find your Cloud Routers:
+
+```
+gcloud compute routers list \
+  --project="$PROJECT_ID"
+```
+
+Find NAT configurations associated with your router:
+
+```
+gcloud compute routers nats list \
+  --router="ROUTER_NAME" \
+  --region="$REGION" \
+  --project="$PROJECT_ID"
+```
+
+Display the NAT configuration:
+
+```
+gcloud compute routers nats describe "NAT_NAME" \
+  --router="ROUTER_NAME" \
+  --region="$REGION" \
+  --project="$PROJECT_ID"
+```
+
+Get the allocated public NAT IP addresses:
+
+```
+gcloud compute routers get-nat-ip-info "ROUTER_NAME" \
+  --region="$REGION" \
+  --nat-name="NAT_NAME" \
+  --project="$PROJECT_ID"
+```
+
+These NAT IPs are particularly relevant for external firewall allowlisting. However, verify that this NAT configuration covers your cluster's subnet and workload traffic; NAT IPs are not necessarily the egress addresses for every destination.&#x20;
+
+[image](https://www.google.com/s2/favicons?domain=https://docs.cloud.google.com\&sz=32)
+
+Google Cloud Documentation+1
+
+
+
+## Summary
+
+| Range                   | Where to find it                                                         |
+| ----------------------- | ------------------------------------------------------------------------ |
+| Node primary CIDR       | `subnets describe` → `ipCidrRange`                                       |
+| Cluster Pod CIDR        | `clusters describe` → `ipAllocationPolicy.clusterIpv4CidrBlock`          |
+| Additional Pod CIDRs    | `ipAllocationPolicy.additionalPodRangesConfig` + subnet secondary ranges |
+| Service CIDR            | `clusters describe` → `ipAllocationPolicy.servicesIpv4CidrBlock`         |
+| Per-node Pod CIDRs      | `kubectl get nodes`                                                      |
+| Public outbound NAT IPs | `routers get-nat-ip-info`                                                |
+
+For your MICS DEV/QA/UAT clusters: The best first step is to run commands 2 and 4 for each cluster. You'll be able to determine whether the clusters share the same VPC subnet and which Pod and Service ranges belong to each environment.
